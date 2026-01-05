@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GenControl">
+  <meta name="description" content="Control de consumo de combustible para generadores eléctricos">
+  <title>GenControl - Generadores</title>
+  <link rel="manifest" href="data:application/json,{
+    %22name%22:%22GenControl%20-%20Generadores%22,
+    %22short_name%22:%22GenControl%22,
+    %22description%22:%22Control%20de%20consumo%20de%20combustible%22,
+    %22start_url%22:%22.%22,
+    %22display%22:%22standalone%22,
+    %22background_color%22:%22%230f172a%22,
+    %22theme_color%22:%22%230f172a%22,
+    %22orientation%22:%22portrait%22,
+    %22icons%22:[{%22src%22:%22data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230f172a' width='100' height='100' rx='20'/><text x='50' y='65' text-anchor='middle' font-size='50'>⚡</text></svg>%22,%22sizes%22:%22512x512%22,%22type%22:%22image/svg+xml%22,%22purpose%22:%22any%20maskable%22}]
+  }">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230f172a' width='100' height='100' rx='20'/><text x='50' y='65' text-anchor='middle' font-size='50'>⚡</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230f172a' width='100' height='100' rx='20'/><text x='50' y='65' text-anchor='middle' font-size='50'>⚡</text></svg>">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    body { margin: 0; overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
+    input[type="number"], input[type="time"], input[type="text"] { font-size: 16px !important; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      const [observaciones, setObservaciones] = useState([]);
+      const [hora, setHora] = useState('');
+      const [linea1, setLinea1] = useState('');
+      const [linea2, setLinea2] = useState('');
+      const [linea3, setLinea3] = useState('');
+      const [voltaje, setVoltaje] = useState('220');
+      const [factorPotencia, setFactorPotencia] = useState('0.8');
+      const [combustibleInicial, setCombustibleInicial] = useState('');
+      const [combustibleFinal, setCombustibleFinal] = useState('');
+      const [resultado, setResultado] = useState(null);
+      const [cliente, setCliente] = useState('');
+      const [equipo, setEquipo] = useState('');
+      const [vista, setVista] = useState('registro');
+
+      // Cargar datos guardados
+      useEffect(() => {
+        try {
+          const saved = localStorage.getItem('gencontrol_data');
+          if (saved) {
+            const data = JSON.parse(saved);
+            setObservaciones(data.observaciones || []);
+            setCliente(data.cliente || '');
+            setEquipo(data.equipo || '');
+            setCombustibleInicial(data.combustibleInicial || '');
+            setCombustibleFinal(data.combustibleFinal || '');
+            setFactorPotencia(data.factorPotencia || '0.8');
+          }
+        } catch(e) {}
+      }, []);
+
+      // Guardar datos
+      useEffect(() => {
+        try {
+          localStorage.setItem('gencontrol_data', JSON.stringify({
+            observaciones, cliente, equipo, combustibleInicial, combustibleFinal, factorPotencia
+          }));
+        } catch(e) {}
+      }, [observaciones, cliente, equipo, combustibleInicial, combustibleFinal, factorPotencia]);
+
+      const calcularDesbalance = (amp1, amp2, amp3) => {
+        const promedio = (amp1 + amp2 + amp3) / 3;
+        if (promedio === 0) return 0;
+        const desviaciones = [Math.abs(amp1 - promedio), Math.abs(amp2 - promedio), Math.abs(amp3 - promedio)];
+        return (Math.max(...desviaciones) / promedio) * 100;
+      };
+
+      const getDesbalanceColor = (d) => d <= 5 ? 'text-emerald-400' : d <= 10 ? 'text-yellow-400' : 'text-red-400';
+      const getDesbalanceBg = (d) => d <= 5 ? 'bg-emerald-500/20 border-emerald-500/50' : d <= 10 ? 'bg-yellow-500/20 border-yellow-500/50' : 'bg-red-500/20 border-red-500/50';
+      const getDesbalanceStatus = (d) => d <= 5 ? 'Óptimo' : d <= 10 ? 'Aceptable' : 'Crítico';
+
+      const calcularKW = (amp1, amp2, amp3, volt, fp) => {
+        const kw1 = (volt * amp1 * fp) / 1000;
+        const kw2 = (volt * amp2 * fp) / 1000;
+        const kw3 = (volt * amp3 * fp) / 1000;
+        return { kw1, kw2, kw3, total: kw1 + kw2 + kw3 };
+      };
+
+      const agregarObservacion = () => {
+        if (!hora || !linea1 || !linea2 || !linea3 || !voltaje) {
+          alert('Complete todos los campos'); return;
+        }
+        const volt = parseFloat(voltaje), fp = parseFloat(factorPotencia);
+        const amp1 = parseFloat(linea1), amp2 = parseFloat(linea2), amp3 = parseFloat(linea3);
+        const potencias = calcularKW(amp1, amp2, amp3, volt, fp);
+        const desbalance = calcularDesbalance(amp1, amp2, amp3);
+        const nuevaObs = {
+          id: Date.now(), hora, linea1: amp1, linea2: amp2, linea3: amp3, voltaje: volt,
+          totalKW: potencias.total, desbalance, fp
+        };
+        setObservaciones([...observaciones, nuevaObs].sort((a, b) => a.hora.localeCompare(b.hora)));
+        setHora(''); setLinea1(''); setLinea2(''); setLinea3('');
+      };
+
+      const eliminarObservacion = (id) => setObservaciones(observaciones.filter(o => o.id !== id));
+
+      const calcularConsumo = () => {
+        const cInicial = parseFloat(combustibleInicial), cFinal = parseFloat(combustibleFinal);
+        if (observaciones.length < 2) { alert('Necesita al menos 2 observaciones'); return; }
+        if (isNaN(cInicial) || isNaN(cFinal)) { alert('Ingrese combustible'); return; }
+        const combustibleConsumido = cInicial - cFinal;
+        let energiaTotal = 0, tiempoTotal = 0;
+        for (let i = 1; i < observaciones.length; i++) {
+          const obs1 = observaciones[i - 1], obs2 = observaciones[i];
+          const [h1, m1] = obs1.hora.split(':').map(Number);
+          const [h2, m2] = obs2.hora.split(':').map(Number);
+          let diffHoras = (h2 + m2/60) - (h1 + m1/60);
+          if (diffHoras < 0) diffHoras += 24;
+          energiaTotal += ((obs1.totalKW + obs2.totalKW) / 2) * diffHoras;
+          tiempoTotal += diffHoras;
+        }
+        const promL1 = observaciones.reduce((s, o) => s + o.linea1, 0) / observaciones.length;
+        const promL2 = observaciones.reduce((s, o) => s + o.linea2, 0) / observaciones.length;
+        const promL3 = observaciones.reduce((s, o) => s + o.linea3, 0) / observaciones.length;
+        const promKW = observaciones.reduce((s, o) => s + o.totalKW, 0) / observaciones.length;
+        const promVoltaje = observaciones.reduce((s, o) => s + o.voltaje, 0) / observaciones.length;
+        const promDesbalance = observaciones.reduce((s, o) => s + o.desbalance, 0) / observaciones.length;
+        const maxDesbalance = Math.max(...observaciones.map(o => o.desbalance));
+        const minDesbalance = Math.min(...observaciones.map(o => o.desbalance));
+        setResultado({
+          combustibleConsumido: combustibleConsumido.toFixed(2), energiaTotal: energiaTotal.toFixed(2),
+          tiempoTotal: tiempoTotal.toFixed(2), eficiencia: (energiaTotal / combustibleConsumido).toFixed(2),
+          consumoPorHora: (combustibleConsumido / tiempoTotal).toFixed(2),
+          promedioL1: promL1.toFixed(1), promedioL2: promL2.toFixed(1), promedioL3: promL3.toFixed(1),
+          promedioKW: promKW.toFixed(2), promedioVoltaje: promVoltaje.toFixed(1),
+          promedioDesbalance: promDesbalance.toFixed(1), maxDesbalance: maxDesbalance.toFixed(1), minDesbalance: minDesbalance.toFixed(1)
+        });
+        setVista('resultados');
+      };
+
+      const limpiarTodo = () => {
+        if(confirm('¿Borrar todos los datos?')) {
+          setObservaciones([]); setCombustibleInicial(''); setCombustibleFinal('');
+          setResultado(null); setCliente(''); setEquipo('');
+        }
+      };
+
+      const nuevoServicio = () => {
+        if(confirm('¿Iniciar nuevo servicio?')) {
+          setObservaciones([]); setCombustibleInicial(''); setCombustibleFinal('');
+          setResultado(null); setCliente(''); setEquipo(''); setVista('registro');
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 pb-20">
+          {/* Header */}
+          <div className="bg-slate-800/80 backdrop-blur-lg sticky top-0 z-10 px-4 py-3 border-b border-slate-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-lg font-bold text-white flex items-center gap-2">⚡ GenControl</h1>
+                <p className="text-slate-400 text-xs">{cliente || 'Sin cliente'} • {equipo || 'Sin equipo'}</p>
+              </div>
+              <div className="flex gap-2">
+                <span className="bg-slate-700 text-amber-400 text-xs px-2 py-1 rounded-full font-medium">{observaciones.length} obs</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 space-y-4">
+            {vista === 'registro' && (
+              <>
+                {/* Datos del servicio */}
+                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                  <h2 className="text-white font-semibold mb-3 text-sm">📋 Servicio</h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="text" value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Cliente" className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"/>
+                    <input type="text" value={equipo} onChange={(e) => setEquipo(e.target.value)} placeholder="Equipo" className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"/>
+                  </div>
+                  <div className="mt-3">
+                    <label className="text-slate-400 text-xs">Factor de Potencia</label>
+                    <input type="number" step="0.05" value={factorPotencia} onChange={(e) => setFactorPotencia(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"/>
+                  </div>
+                </div>
+
+                {/* Nueva observación */}
+                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                  <h2 className="text-white font-semibold mb-3 text-sm">➕ Nueva Lectura</h2>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="text-slate-400 text-xs">Hora</label>
+                      <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"/>
+                    </div>
+                    <div>
+                      <label className="text-cyan-400 text-xs">Voltaje (V)</label>
+                      <input type="number" value={voltaje} onChange={(e) => setVoltaje(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"/>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div>
+                      <label className="text-red-400 text-xs">L1 (A)</label>
+                      <input type="number" value={linea1} onChange={(e) => setLinea1(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"/>
+                    </div>
+                    <div>
+                      <label className="text-yellow-400 text-xs">L2 (A)</label>
+                      <input type="number" value={linea2} onChange={(e) => setLinea2(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"/>
+                    </div>
+                    <div>
+                      <label className="text-blue-400 text-xs">L3 (A)</label>
+                      <input type="number" value={linea3} onChange={(e) => setLinea3(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                    </div>
+                  </div>
+                  <button onClick={agregarObservacion} className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 rounded-xl transition-colors">
+                    Agregar Lectura
+                  </button>
+                </div>
+
+                {/* Lista de observaciones */}
+                {observaciones.length > 0 && (
+                  <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                    <h2 className="text-white font-semibold mb-3 text-sm">📊 Lecturas ({observaciones.length})</h2>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {observaciones.map((obs) => (
+                        <div key={obs.id} className={`rounded-xl p-3 border ${getDesbalanceBg(obs.desbalance)}`}>
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <span className="text-amber-400 font-mono font-bold">{obs.hora}</span>
+                              <span className="text-cyan-400 text-sm ml-2">{obs.voltaje}V</span>
+                            </div>
+                            <button onClick={() => eliminarObservacion(obs.id)} className="text-slate-400 hover:text-red-400 text-lg">×</button>
+                          </div>
+                          <div className="flex gap-2 text-xs mb-2">
+                            <span className="text-red-400 bg-red-500/20 px-2 py-1 rounded">L1: {obs.linea1}A</span>
+                            <span className="text-yellow-400 bg-yellow-500/20 px-2 py-1 rounded">L2: {obs.linea2}A</span>
+                            <span className="text-blue-400 bg-blue-500/20 px-2 py-1 rounded">L3: {obs.linea3}A</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-emerald-400">{obs.totalKW.toFixed(2)} kW</span>
+                            <span className={getDesbalanceColor(obs.desbalance)}>⚖️ {obs.desbalance.toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Combustible */}
+                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                  <h2 className="text-white font-semibold mb-3 text-sm">⛽ Combustible (L)</h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-slate-400 text-xs">Inicial</label>
+                      <input type="number" value={combustibleInicial} onChange={(e) => setCombustibleInicial(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"/>
+                    </div>
+                    <div>
+                      <label className="text-slate-400 text-xs">Final</label>
+                      <input type="number" value={combustibleFinal} onChange={(e) => setCombustibleFinal(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"/>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {vista === 'resultados' && resultado && (
+              <div className="space-y-4">
+                <div className="bg-slate-800 rounded-2xl p-4 border border-emerald-600">
+                  <h2 className="text-emerald-400 font-semibold mb-4">✅ Resultados</h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-700/50 rounded-xl p-4 text-center">
+                      <p className="text-slate-400 text-xs mb-1">Combustible</p>
+                      <p className="text-2xl font-bold text-amber-400">{resultado.combustibleConsumido}</p>
+                      <p className="text-slate-500 text-xs">litros</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-xl p-4 text-center">
+                      <p className="text-slate-400 text-xs mb-1">Tiempo</p>
+                      <p className="text-2xl font-bold text-blue-400">{resultado.tiempoTotal}</p>
+                      <p className="text-slate-500 text-xs">horas</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-xl p-4 text-center">
+                      <p className="text-slate-400 text-xs mb-1">Energía</p>
+                      <p className="text-2xl font-bold text-emerald-400">{resultado.energiaTotal}</p>
+                      <p className="text-slate-500 text-xs">kWh</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-xl p-4 text-center">
+                      <p className="text-slate-400 text-xs mb-1">Consumo/h</p>
+                      <p className="text-2xl font-bold text-purple-400">{resultado.consumoPorHora}</p>
+                      <p className="text-slate-500 text-xs">L/h</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-xl p-4 text-center col-span-2">
+                      <p className="text-slate-400 text-xs mb-1">Eficiencia</p>
+                      <p className="text-3xl font-bold text-cyan-400">{resultado.eficiencia}</p>
+                      <p className="text-slate-500 text-xs">kWh/L</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                  <h3 className="text-white font-semibold mb-3 text-sm">📈 Promedios</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between"><span className="text-red-400">Línea 1:</span><span className="text-white font-medium">{resultado.promedioL1} A</span></div>
+                    <div className="flex justify-between"><span className="text-yellow-400">Línea 2:</span><span className="text-white font-medium">{resultado.promedioL2} A</span></div>
+                    <div className="flex justify-between"><span className="text-blue-400">Línea 3:</span><span className="text-white font-medium">{resultado.promedioL3} A</span></div>
+                    <div className="border-t border-slate-700 pt-2 mt-2">
+                      <div className="flex justify-between"><span className="text-slate-400">Potencia:</span><span className="text-emerald-400 font-bold">{resultado.promedioKW} kW</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Voltaje:</span><span className="text-cyan-400 font-bold">{resultado.promedioVoltaje} V</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+                  <h3 className="text-white font-semibold mb-3 text-sm">⚖️ Desbalance</h3>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-slate-700/50 rounded-xl p-3">
+                      <p className="text-slate-500 text-xs">Mín</p>
+                      <p className={`text-xl font-bold ${getDesbalanceColor(parseFloat(resultado.minDesbalance))}`}>{resultado.minDesbalance}%</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-xl p-3">
+                      <p className="text-slate-500 text-xs">Prom</p>
+                      <p className={`text-xl font-bold ${getDesbalanceColor(parseFloat(resultado.promedioDesbalance))}`}>{resultado.promedioDesbalance}%</p>
+                    </div>
+                    <div className="bg-slate-700/50 rounded-xl p-3">
+                      <p className="text-slate-500 text-xs">Máx</p>
+                      <p className={`text-xl font-bold ${getDesbalanceColor(parseFloat(resultado.maxDesbalance))}`}>{resultado.maxDesbalance}%</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-center gap-3 mt-3 text-xs">
+                    <span className="text-emerald-400">●≤5% Óptimo</span>
+                    <span className="text-yellow-400">●≤10% OK</span>
+                    <span className="text-red-400">●&gt;10% Crítico</span>
+                  </div>
+                </div>
+
+                <button onClick={nuevoServicio} className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold py-4 rounded-xl transition-colors">
+                  🔄 Nuevo Servicio
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Navigation */}
+          <div className="fixed bottom-0 left-0 right-0 bg-slate-800/95 backdrop-blur-lg border-t border-slate-700 px-4 py-2 flex gap-2">
+            {vista === 'registro' ? (
+              <>
+                <button onClick={limpiarTodo} className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium py-3 rounded-xl transition-colors">
+                  🗑️ Limpiar
+                </button>
+                <button onClick={calcularConsumo} className="flex-[2] bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-900 font-bold py-3 rounded-xl transition-colors">
+                  📊 Calcular
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setVista('registro')} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 rounded-xl transition-colors">
+                ← Volver al Registro
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
