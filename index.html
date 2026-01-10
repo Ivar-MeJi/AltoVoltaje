@@ -5,373 +5,561 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="GenControl">
-  <meta name="description" content="Control de consumo de combustible para generadores eléctricos">
-  <title>GenControl - Generadores</title>
-  <link rel="manifest" href="data:application/json,{
-    %22name%22:%22GenControl%20-%20Generadores%22,
-    %22short_name%22:%22GenControl%22,
-    %22description%22:%22Control%20de%20consumo%20de%20combustible%22,
-    %22start_url%22:%22.%22,
-    %22display%22:%22standalone%22,
-    %22background_color%22:%22%230f172a%22,
-    %22theme_color%22:%22%230f172a%22,
-    %22orientation%22:%22portrait%22,
-    %22icons%22:[{%22src%22:%22data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230f172a' width='100' height='100' rx='20'/><text x='50' y='65' text-anchor='middle' font-size='50'>⚡</text></svg>%22,%22sizes%22:%22512x512%22,%22type%22:%22image/svg+xml%22,%22purpose%22:%22any%20maskable%22}]
-  }">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230f172a' width='100' height='100' rx='20'/><text x='50' y='65' text-anchor='middle' font-size='50'>⚡</text></svg>">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230f172a' width='100' height='100' rx='20'/><text x='50' y='65' text-anchor='middle' font-size='50'>⚡</text></svg>">
+  <title>GenControl</title>
+  <link rel="manifest" href="data:application/json,{%22name%22:%22GenControl%22,%22short_name%22:%22GenControl%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%230f172a%22,%22theme_color%22:%22%230f172a%22}">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-    body { margin: 0; overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
-    input[type="number"], input[type="time"], input[type="text"] { font-size: 16px !important; }
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: #1e293b; }
-    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-  </style>
+  <style>*{-webkit-tap-highlight-color:transparent}body{margin:0}input,select{font-size:16px!important}</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect} = React;
 
-    function App() {
-      const [observaciones, setObservaciones] = useState([]);
-      const [hora, setHora] = useState('');
-      const [linea1, setLinea1] = useState('');
-      const [linea2, setLinea2] = useState('');
-      const [linea3, setLinea3] = useState('');
-      const [voltaje, setVoltaje] = useState('220');
-      const [factorPotencia, setFactorPotencia] = useState('0.8');
-      const [combustibleInicial, setCombustibleInicial] = useState('');
-      const [combustibleFinal, setCombustibleFinal] = useState('');
-      const [resultado, setResultado] = useState(null);
-      const [cliente, setCliente] = useState('');
-      const [equipo, setEquipo] = useState('');
-      const [vista, setVista] = useState('registro');
+const FRACCIONES = [
+  {valor: 0, label: 'E', desc: 'Vacío'},
+  {valor: 1/16, label: '1/16', desc: '1/16'},
+  {valor: 2/16, label: '1/8', desc: '1/8'},
+  {valor: 3/16, label: '1/8+', desc: '1/8 y 1/16'},
+  {valor: 4/16, label: '1/4', desc: '1/4'},
+  {valor: 5/16, label: '1/4+', desc: '1/4 y 1/16'},
+  {valor: 6/16, label: '3/8', desc: '3/8'},
+  {valor: 7/16, label: '3/8+', desc: '3/8 y 1/16'},
+  {valor: 8/16, label: '1/2', desc: '1/2'},
+  {valor: 9/16, label: '1/2+', desc: '1/2 y 1/16'},
+  {valor: 10/16, label: '5/8', desc: '5/8'},
+  {valor: 11/16, label: '5/8+', desc: '5/8 y 1/16'},
+  {valor: 12/16, label: '3/4', desc: '3/4'},
+  {valor: 13/16, label: '3/4+', desc: '3/4 y 1/16'},
+  {valor: 14/16, label: '7/8', desc: '7/8'},
+  {valor: 15/16, label: '7/8+', desc: '7/8 y 1/16'},
+  {valor: 1, label: 'F', desc: 'Lleno'},
+];
 
-      // Cargar datos guardados
-      useEffect(() => {
-        try {
-          const saved = localStorage.getItem('gencontrol_data');
-          if (saved) {
-            const data = JSON.parse(saved);
-            setObservaciones(data.observaciones || []);
-            setCliente(data.cliente || '');
-            setEquipo(data.equipo || '');
-            setCombustibleInicial(data.combustibleInicial || '');
-            setCombustibleFinal(data.combustibleFinal || '');
-            setFactorPotencia(data.factorPotencia || '0.8');
-          }
-        } catch(e) {}
-      }, []);
+const SHEETS_URL_KEY = 'gc_sheets_url';
 
-      // Guardar datos
-      useEffect(() => {
-        try {
-          localStorage.setItem('gencontrol_data', JSON.stringify({
-            observaciones, cliente, equipo, combustibleInicial, combustibleFinal, factorPotencia
-          }));
-        } catch(e) {}
-      }, [observaciones, cliente, equipo, combustibleInicial, combustibleFinal, factorPotencia]);
+function App() {
+  const [vista, setVista] = useState('registro');
+  const [sheetsUrl, setSheetsUrl] = useState('');
+  
+  useEffect(() => { setSheetsUrl(localStorage.getItem(SHEETS_URL_KEY) || ''); }, []);
 
-      const calcularDesbalance = (amp1, amp2, amp3) => {
-        const promedio = (amp1 + amp2 + amp3) / 3;
-        if (promedio === 0) return 0;
-        const desviaciones = [Math.abs(amp1 - promedio), Math.abs(amp2 - promedio), Math.abs(amp3 - promedio)];
-        return (Math.max(...desviaciones) / promedio) * 100;
-      };
-
-      const getDesbalanceColor = (d) => d <= 5 ? 'text-emerald-400' : d <= 10 ? 'text-yellow-400' : 'text-red-400';
-      const getDesbalanceBg = (d) => d <= 5 ? 'bg-emerald-500/20 border-emerald-500/50' : d <= 10 ? 'bg-yellow-500/20 border-yellow-500/50' : 'bg-red-500/20 border-red-500/50';
-      const getDesbalanceStatus = (d) => d <= 5 ? 'Óptimo' : d <= 10 ? 'Aceptable' : 'Crítico';
-
-      const calcularKW = (amp1, amp2, amp3, volt, fp) => {
-        const kw1 = (volt * amp1 * fp) / 1000;
-        const kw2 = (volt * amp2 * fp) / 1000;
-        const kw3 = (volt * amp3 * fp) / 1000;
-        return { kw1, kw2, kw3, total: kw1 + kw2 + kw3 };
-      };
-
-      const agregarObservacion = () => {
-        if (!hora || !linea1 || !linea2 || !linea3 || !voltaje) {
-          alert('Complete todos los campos'); return;
-        }
-        const volt = parseFloat(voltaje), fp = parseFloat(factorPotencia);
-        const amp1 = parseFloat(linea1), amp2 = parseFloat(linea2), amp3 = parseFloat(linea3);
-        const potencias = calcularKW(amp1, amp2, amp3, volt, fp);
-        const desbalance = calcularDesbalance(amp1, amp2, amp3);
-        const nuevaObs = {
-          id: Date.now(), hora, linea1: amp1, linea2: amp2, linea3: amp3, voltaje: volt,
-          totalKW: potencias.total, desbalance, fp
-        };
-        setObservaciones([...observaciones, nuevaObs].sort((a, b) => a.hora.localeCompare(b.hora)));
-        setHora(''); setLinea1(''); setLinea2(''); setLinea3('');
-      };
-
-      const eliminarObservacion = (id) => setObservaciones(observaciones.filter(o => o.id !== id));
-
-      const calcularConsumo = () => {
-        const cInicial = parseFloat(combustibleInicial), cFinal = parseFloat(combustibleFinal);
-        if (observaciones.length < 2) { alert('Necesita al menos 2 observaciones'); return; }
-        if (isNaN(cInicial) || isNaN(cFinal)) { alert('Ingrese combustible'); return; }
-        const combustibleConsumido = cInicial - cFinal;
-        let energiaTotal = 0, tiempoTotal = 0;
-        for (let i = 1; i < observaciones.length; i++) {
-          const obs1 = observaciones[i - 1], obs2 = observaciones[i];
-          const [h1, m1] = obs1.hora.split(':').map(Number);
-          const [h2, m2] = obs2.hora.split(':').map(Number);
-          let diffHoras = (h2 + m2/60) - (h1 + m1/60);
-          if (diffHoras < 0) diffHoras += 24;
-          energiaTotal += ((obs1.totalKW + obs2.totalKW) / 2) * diffHoras;
-          tiempoTotal += diffHoras;
-        }
-        const promL1 = observaciones.reduce((s, o) => s + o.linea1, 0) / observaciones.length;
-        const promL2 = observaciones.reduce((s, o) => s + o.linea2, 0) / observaciones.length;
-        const promL3 = observaciones.reduce((s, o) => s + o.linea3, 0) / observaciones.length;
-        const promKW = observaciones.reduce((s, o) => s + o.totalKW, 0) / observaciones.length;
-        const promVoltaje = observaciones.reduce((s, o) => s + o.voltaje, 0) / observaciones.length;
-        const promDesbalance = observaciones.reduce((s, o) => s + o.desbalance, 0) / observaciones.length;
-        const maxDesbalance = Math.max(...observaciones.map(o => o.desbalance));
-        const minDesbalance = Math.min(...observaciones.map(o => o.desbalance));
-        setResultado({
-          combustibleConsumido: combustibleConsumido.toFixed(2), energiaTotal: energiaTotal.toFixed(2),
-          tiempoTotal: tiempoTotal.toFixed(2), eficiencia: (energiaTotal / combustibleConsumido).toFixed(2),
-          consumoPorHora: (combustibleConsumido / tiempoTotal).toFixed(2),
-          promedioL1: promL1.toFixed(1), promedioL2: promL2.toFixed(1), promedioL3: promL3.toFixed(1),
-          promedioKW: promKW.toFixed(2), promedioVoltaje: promVoltaje.toFixed(1),
-          promedioDesbalance: promDesbalance.toFixed(1), maxDesbalance: maxDesbalance.toFixed(1), minDesbalance: minDesbalance.toFixed(1)
-        });
-        setVista('resultados');
-      };
-
-      const limpiarTodo = () => {
-        if(confirm('¿Borrar todos los datos?')) {
-          setObservaciones([]); setCombustibleInicial(''); setCombustibleFinal('');
-          setResultado(null); setCliente(''); setEquipo('');
-        }
-      };
-
-      const nuevoServicio = () => {
-        if(confirm('¿Iniciar nuevo servicio?')) {
-          setObservaciones([]); setCombustibleInicial(''); setCombustibleFinal('');
-          setResultado(null); setCliente(''); setEquipo(''); setVista('registro');
-        }
-      };
-
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 pb-20">
-          {/* Header */}
-          <div className="bg-slate-800/80 backdrop-blur-lg sticky top-0 z-10 px-4 py-3 border-b border-slate-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-lg font-bold text-white flex items-center gap-2">⚡ GenControl</h1>
-                <p className="text-slate-400 text-xs">{cliente || 'Sin cliente'} • {equipo || 'Sin equipo'}</p>
-              </div>
-              <div className="flex gap-2">
-                <span className="bg-slate-700 text-amber-400 text-xs px-2 py-1 rounded-full font-medium">{observaciones.length} obs</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="p-4 space-y-4">
-            {vista === 'registro' && (
-              <>
-                {/* Datos del servicio */}
-                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                  <h2 className="text-white font-semibold mb-3 text-sm">📋 Servicio</h2>
-                  <div className="grid grid-cols-2 gap-3">
-                    <input type="text" value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Cliente" className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"/>
-                    <input type="text" value={equipo} onChange={(e) => setEquipo(e.target.value)} placeholder="Equipo" className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"/>
-                  </div>
-                  <div className="mt-3">
-                    <label className="text-slate-400 text-xs">Factor de Potencia</label>
-                    <input type="number" step="0.05" value={factorPotencia} onChange={(e) => setFactorPotencia(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"/>
-                  </div>
-                </div>
-
-                {/* Nueva observación */}
-                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                  <h2 className="text-white font-semibold mb-3 text-sm">➕ Nueva Lectura</h2>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <label className="text-slate-400 text-xs">Hora</label>
-                      <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"/>
-                    </div>
-                    <div>
-                      <label className="text-cyan-400 text-xs">Voltaje (V)</label>
-                      <input type="number" value={voltaje} onChange={(e) => setVoltaje(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"/>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    <div>
-                      <label className="text-red-400 text-xs">L1 (A)</label>
-                      <input type="number" value={linea1} onChange={(e) => setLinea1(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"/>
-                    </div>
-                    <div>
-                      <label className="text-yellow-400 text-xs">L2 (A)</label>
-                      <input type="number" value={linea2} onChange={(e) => setLinea2(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"/>
-                    </div>
-                    <div>
-                      <label className="text-blue-400 text-xs">L3 (A)</label>
-                      <input type="number" value={linea3} onChange={(e) => setLinea3(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
-                    </div>
-                  </div>
-                  <button onClick={agregarObservacion} className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 rounded-xl transition-colors">
-                    Agregar Lectura
-                  </button>
-                </div>
-
-                {/* Lista de observaciones */}
-                {observaciones.length > 0 && (
-                  <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                    <h2 className="text-white font-semibold mb-3 text-sm">📊 Lecturas ({observaciones.length})</h2>
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {observaciones.map((obs) => (
-                        <div key={obs.id} className={`rounded-xl p-3 border ${getDesbalanceBg(obs.desbalance)}`}>
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <span className="text-amber-400 font-mono font-bold">{obs.hora}</span>
-                              <span className="text-cyan-400 text-sm ml-2">{obs.voltaje}V</span>
-                            </div>
-                            <button onClick={() => eliminarObservacion(obs.id)} className="text-slate-400 hover:text-red-400 text-lg">×</button>
-                          </div>
-                          <div className="flex gap-2 text-xs mb-2">
-                            <span className="text-red-400 bg-red-500/20 px-2 py-1 rounded">L1: {obs.linea1}A</span>
-                            <span className="text-yellow-400 bg-yellow-500/20 px-2 py-1 rounded">L2: {obs.linea2}A</span>
-                            <span className="text-blue-400 bg-blue-500/20 px-2 py-1 rounded">L3: {obs.linea3}A</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-emerald-400">{obs.totalKW.toFixed(2)} kW</span>
-                            <span className={getDesbalanceColor(obs.desbalance)}>⚖️ {obs.desbalance.toFixed(1)}%</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Combustible */}
-                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                  <h2 className="text-white font-semibold mb-3 text-sm">⛽ Combustible (L)</h2>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-slate-400 text-xs">Inicial</label>
-                      <input type="number" value={combustibleInicial} onChange={(e) => setCombustibleInicial(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"/>
-                    </div>
-                    <div>
-                      <label className="text-slate-400 text-xs">Final</label>
-                      <input type="number" value={combustibleFinal} onChange={(e) => setCombustibleFinal(e.target.value)} placeholder="0" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"/>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {vista === 'resultados' && resultado && (
-              <div className="space-y-4">
-                <div className="bg-slate-800 rounded-2xl p-4 border border-emerald-600">
-                  <h2 className="text-emerald-400 font-semibold mb-4">✅ Resultados</h2>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-700/50 rounded-xl p-4 text-center">
-                      <p className="text-slate-400 text-xs mb-1">Combustible</p>
-                      <p className="text-2xl font-bold text-amber-400">{resultado.combustibleConsumido}</p>
-                      <p className="text-slate-500 text-xs">litros</p>
-                    </div>
-                    <div className="bg-slate-700/50 rounded-xl p-4 text-center">
-                      <p className="text-slate-400 text-xs mb-1">Tiempo</p>
-                      <p className="text-2xl font-bold text-blue-400">{resultado.tiempoTotal}</p>
-                      <p className="text-slate-500 text-xs">horas</p>
-                    </div>
-                    <div className="bg-slate-700/50 rounded-xl p-4 text-center">
-                      <p className="text-slate-400 text-xs mb-1">Energía</p>
-                      <p className="text-2xl font-bold text-emerald-400">{resultado.energiaTotal}</p>
-                      <p className="text-slate-500 text-xs">kWh</p>
-                    </div>
-                    <div className="bg-slate-700/50 rounded-xl p-4 text-center">
-                      <p className="text-slate-400 text-xs mb-1">Consumo/h</p>
-                      <p className="text-2xl font-bold text-purple-400">{resultado.consumoPorHora}</p>
-                      <p className="text-slate-500 text-xs">L/h</p>
-                    </div>
-                    <div className="bg-slate-700/50 rounded-xl p-4 text-center col-span-2">
-                      <p className="text-slate-400 text-xs mb-1">Eficiencia</p>
-                      <p className="text-3xl font-bold text-cyan-400">{resultado.eficiencia}</p>
-                      <p className="text-slate-500 text-xs">kWh/L</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                  <h3 className="text-white font-semibold mb-3 text-sm">📈 Promedios</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between"><span className="text-red-400">Línea 1:</span><span className="text-white font-medium">{resultado.promedioL1} A</span></div>
-                    <div className="flex justify-between"><span className="text-yellow-400">Línea 2:</span><span className="text-white font-medium">{resultado.promedioL2} A</span></div>
-                    <div className="flex justify-between"><span className="text-blue-400">Línea 3:</span><span className="text-white font-medium">{resultado.promedioL3} A</span></div>
-                    <div className="border-t border-slate-700 pt-2 mt-2">
-                      <div className="flex justify-between"><span className="text-slate-400">Potencia:</span><span className="text-emerald-400 font-bold">{resultado.promedioKW} kW</span></div>
-                      <div className="flex justify-between"><span className="text-slate-400">Voltaje:</span><span className="text-cyan-400 font-bold">{resultado.promedioVoltaje} V</span></div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
-                  <h3 className="text-white font-semibold mb-3 text-sm">⚖️ Desbalance</h3>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-slate-700/50 rounded-xl p-3">
-                      <p className="text-slate-500 text-xs">Mín</p>
-                      <p className={`text-xl font-bold ${getDesbalanceColor(parseFloat(resultado.minDesbalance))}`}>{resultado.minDesbalance}%</p>
-                    </div>
-                    <div className="bg-slate-700/50 rounded-xl p-3">
-                      <p className="text-slate-500 text-xs">Prom</p>
-                      <p className={`text-xl font-bold ${getDesbalanceColor(parseFloat(resultado.promedioDesbalance))}`}>{resultado.promedioDesbalance}%</p>
-                    </div>
-                    <div className="bg-slate-700/50 rounded-xl p-3">
-                      <p className="text-slate-500 text-xs">Máx</p>
-                      <p className={`text-xl font-bold ${getDesbalanceColor(parseFloat(resultado.maxDesbalance))}`}>{resultado.maxDesbalance}%</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-center gap-3 mt-3 text-xs">
-                    <span className="text-emerald-400">●≤5% Óptimo</span>
-                    <span className="text-yellow-400">●≤10% OK</span>
-                    <span className="text-red-400">●&gt;10% Crítico</span>
-                  </div>
-                </div>
-
-                <button onClick={nuevoServicio} className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold py-4 rounded-xl transition-colors">
-                  🔄 Nuevo Servicio
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Bottom Navigation */}
-          <div className="fixed bottom-0 left-0 right-0 bg-slate-800/95 backdrop-blur-lg border-t border-slate-700 px-4 py-2 flex gap-2">
-            {vista === 'registro' ? (
-              <>
-                <button onClick={limpiarTodo} className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium py-3 rounded-xl transition-colors">
-                  🗑️ Limpiar
-                </button>
-                <button onClick={calcularConsumo} className="flex-[2] bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-900 font-bold py-3 rounded-xl transition-colors">
-                  📊 Calcular
-                </button>
-              </>
-            ) : (
-              <button onClick={() => setVista('registro')} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 rounded-xl transition-colors">
-                ← Volver al Registro
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
+      <div className="bg-slate-800/90 backdrop-blur sticky top-0 z-20 px-4 py-3 border-b border-slate-700">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold text-white">⚡ GenControl</h1>
+          <div className="flex gap-1">
+            {['registro','historial','stats','config'].map(v => (
+              <button key={v} onClick={() => setVista(v)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium ${vista===v?'bg-amber-500 text-slate-900':'bg-slate-700 text-slate-300'}`}>
+                {v==='registro'?'📝':v==='historial'?'📋':v==='stats'?'📊':'⚙️'}
               </button>
-            )}
+            ))}
           </div>
         </div>
-      );
-    }
+      </div>
+      <div className="max-w-4xl mx-auto">
+        {vista === 'registro' && <Registro sheetsUrl={sheetsUrl} />}
+        {vista === 'historial' && <Historial sheetsUrl={sheetsUrl} />}
+        {vista === 'stats' && <Estadisticas />}
+        {vista === 'config' && <Config sheetsUrl={sheetsUrl} setSheetsUrl={setSheetsUrl} />}
+      </div>
+    </div>
+  );
+}
 
-    ReactDOM.render(<App />, document.getElementById('root'));
-  </script>
+function CombustibleSelector({equipo, equipos, combI, setCombI, combF, setCombF}) {
+  const eqInfo = equipos.find(e => e.id === equipo);
+  const capacidad = eqInfo?.tanque || 0;
+  const [descI, setDescI] = useState('');
+  const [descF, setDescF] = useState('');
+  
+  const getFraccion = (litros) => {
+    if (!capacidad || !litros) return null;
+    const frac = parseFloat(litros) / capacidad;
+    return FRACCIONES.reduce((prev, curr) => Math.abs(curr.valor - frac) < Math.abs(prev.valor - frac) ? curr : prev);
+  };
+
+  const fracI = getFraccion(combI);
+  const fracF = getFraccion(combF);
+
+  const renderBotones = (tipo, fracSelec, setVal, setDesc) => (
+    <div className="space-y-1">
+      <div className="grid grid-cols-9 gap-1">
+        {FRACCIONES.slice(0, 9).map((f, i) => (
+          <button key={i} onClick={() => {setVal((f.valor * capacidad).toString()); setDesc(f.desc);}}
+            className={`py-2 rounded text-xs font-medium ${
+              fracSelec?.valor === f.valor 
+                ? tipo === 'inicial' ? 'bg-emerald-500 text-white ring-2 ring-emerald-400' : 'bg-red-500 text-white ring-2 ring-red-400'
+                : 'bg-slate-700 text-slate-400'
+            }`}>{f.label}</button>
+        ))}
+      </div>
+      <div className="grid grid-cols-8 gap-1">
+        {FRACCIONES.slice(9).map((f, i) => (
+          <button key={i} onClick={() => {setVal((f.valor * capacidad).toString()); setDesc(f.desc);}}
+            className={`py-2 rounded text-xs font-medium ${
+              fracSelec?.valor === f.valor 
+                ? tipo === 'inicial' ? 'bg-emerald-500 text-white ring-2 ring-emerald-400' : 'bg-red-500 text-white ring-2 ring-red-400'
+                : 'bg-slate-700 text-slate-400'
+            }`}>{f.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+      <div className="flex justify-between items-center mb-3">
+        <h2 className="text-white font-semibold text-sm">⛽ Combustible</h2>
+        {capacidad > 0 && <span className="text-slate-400 text-xs">Tanque: {capacidad}L</span>}
+      </div>
+      
+      {!equipo || capacidad === 0 ? (
+        <p className="text-amber-400 text-sm text-center py-4">⚠️ Seleccione equipo con tanque</p>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-emerald-400 text-xs font-medium">🟢 Inicial {descI && `(${descI})`}</label>
+              <span className="text-white font-bold">{combI ? `${parseFloat(combI).toFixed(1)}L` : '-'}</span>
+            </div>
+            {renderBotones('inicial', fracI, setCombI, setDescI)}
+          </div>
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-red-400 text-xs font-medium">🔴 Final {descF && `(${descF})`}</label>
+              <span className="text-white font-bold">{combF ? `${parseFloat(combF).toFixed(1)}L` : '-'}</span>
+            </div>
+            {renderBotones('final', fracF, setCombF, setDescF)}
+          </div>
+          {combI && combF && (
+            <div className="bg-slate-700/50 rounded-lg p-3">
+              <div className="h-3 bg-slate-700 rounded-full overflow-hidden flex mb-2">
+                <div className="h-full bg-amber-500" style={{width: `${(parseFloat(combF)/capacidad)*100}%`}} />
+                <div className="h-full bg-amber-500/30" style={{width: `${((parseFloat(combI)-parseFloat(combF))/capacidad)*100}%`}} />
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 text-sm">Consumido:</span>
+                <span className="text-amber-400 font-bold text-lg">{(parseFloat(combI) - parseFloat(combF)).toFixed(1)} L</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Registro({sheetsUrl}) {
+  const [obs, setObs] = useState([]);
+  const [hora, setHora] = useState('');
+  const [l1, setL1] = useState('');
+  const [l2, setL2] = useState('');
+  const [l3, setL3] = useState('');
+  const [volt, setVolt] = useState('220');
+  const [combI, setCombI] = useState('');
+  const [combF, setCombF] = useState('');
+  const [res, setRes] = useState(null);
+  const fp = localStorage.getItem('gc_fp') || '0.8';
+  const [cliente, setCliente] = useState('');
+  const [equipo, setEquipo] = useState('');
+  const [hEnc, setHEnc] = useState('');
+  const [hApg, setHApg] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [equipos, setEquipos] = useState([]);
+
+  useEffect(() => {
+    setEquipos(JSON.parse(localStorage.getItem('gc_equipos') || '[]'));
+    const s = localStorage.getItem('gc_actual');
+    if (s) { const d = JSON.parse(s); setObs(d.obs||[]); setCliente(d.cli||''); setEquipo(d.eq||''); setCombI(d.ci||''); setCombF(d.cf||''); setHEnc(d.he||''); setHApg(d.ha||''); }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('gc_actual', JSON.stringify({obs,cli:cliente,eq:equipo,ci:combI,cf:combF,he:hEnc,ha:hApg}));
+  }, [obs,cliente,equipo,combI,combF,hEnc,hApg]);
+
+  const calcDesb = (a1,a2,a3) => {const p=(a1+a2+a3)/3;return p===0?0:(Math.max(Math.abs(a1-p),Math.abs(a2-p),Math.abs(a3-p))/p)*100;};
+  const getDbCol = d => d<=5?'text-emerald-400':d<=10?'text-yellow-400':'text-red-400';
+  const getDbBg = d => d<=5?'border-emerald-500/50 bg-emerald-500/10':d<=10?'border-yellow-500/50 bg-yellow-500/10':'border-red-500/50 bg-red-500/10';
+  const parseH = h => {const[hr,mn]=h.split(':').map(Number);return hr+mn/60;};
+
+  const agregar = () => {
+    if(!hora||!l1||!l2||!l3||!volt){alert('Complete todos los campos');return;}
+    const v=parseFloat(volt),f=parseFloat(fp),a1=parseFloat(l1),a2=parseFloat(l2),a3=parseFloat(l3);
+    const kw=(v*(a1+a2+a3)*f)/1000,desb=calcDesb(a1,a2,a3);
+    setObs([...obs,{id:Date.now(),hora,l1:a1,l2:a2,l3:a3,volt:v,kw,desb,fp:f}].sort((a,b)=>a.hora.localeCompare(b.hora)));
+    setHora('');setL1('');setL2('');setL3('');
+  };
+
+  const calcular = () => {
+    const ci=parseFloat(combI),cf=parseFloat(combF);
+    if(obs.length<1){alert('Necesita al menos 1 observación');return;}
+    if(isNaN(ci)||isNaN(cf)){alert('Ingrese combustible');return;}
+    if(!hEnc||!hApg){alert('Ingrese hora de encendido y apagado');return;}
+    
+    const combustible=ci-cf;
+    let energia=0;
+    const he=parseH(hEnc);
+    let ha=parseH(hApg);if(ha<=he)ha+=24;
+    const sorted=[...obs].sort((a,b)=>a.hora.localeCompare(b.hora));
+    
+    if(sorted.length===1){energia=sorted[0].kw*(ha-he);}
+    else{
+      const hP=parseH(sorted[0].hora);if(hP>he)energia+=sorted[0].kw*(hP-he);
+      for(let i=1;i<sorted.length;i++){
+        const h1=parseH(sorted[i-1].hora),h2=parseH(sorted[i].hora);
+        let diff=h2-h1;if(diff<0)diff+=24;
+        energia+=((sorted[i-1].kw+sorted[i].kw)/2)*diff;
+      }
+      let hU=parseH(sorted[sorted.length-1].hora);if(hU<he)hU+=24;
+      if(ha>hU)energia+=sorted[sorted.length-1].kw*(ha-hU);
+    }
+    
+    const tiempo=ha-he;
+    const eqInfo=equipos.find(e=>e.id===equipo);
+    const potNom=eqInfo?.potencia||100;
+    const pKW=obs.reduce((s,o)=>s+o.kw,0)/obs.length;
+    const cargaProm=(pKW/potNom)*100;
+    
+    setRes({
+      id:'SVC-'+Date.now(),fecha:new Date().toISOString().split('T')[0],
+      equipo,cliente,hEnc,hApg,fp:parseFloat(fp),tiempo:tiempo.toFixed(2),
+      combI:ci,combF:cf,comb:combustible.toFixed(2),energ:energia.toFixed(2),
+      efic:(energia/combustible).toFixed(2),combH:(combustible/tiempo).toFixed(2),
+      pKW:pKW.toFixed(2),cargaProm:cargaProm.toFixed(1),
+      pDb:(obs.reduce((s,o)=>s+o.desb,0)/obs.length).toFixed(1),
+      obs:obs.map(o=>({hora:o.hora,voltaje:o.volt,l1:o.l1,l2:o.l2,l3:o.l3,ampProm:((o.l1+o.l2+o.l3)/3).toFixed(1),potencia:o.kw.toFixed(2),desbalance:o.desb.toFixed(1),carga:((o.kw/potNom)*100).toFixed(1)}))
+    });
+  };
+
+  const guardarLocal = () => {
+    if(!res)return;
+    const hist=JSON.parse(localStorage.getItem('gc_historial')||'[]');
+    hist.unshift({...res,sincronizado:false});
+    localStorage.setItem('gc_historial',JSON.stringify(hist));
+    alert('✅ Guardado localmente');
+    limpiar();
+  };
+
+  const guardarYEnviar = async () => {
+    if(!res)return;
+    if(!sheetsUrl){alert('Configure URL de Sheets');return;}
+    setEnviando(true);
+    try {
+      const payload = {id:res.id,fecha:res.fecha,equipo:res.equipo,cliente:res.cliente,horaEnc:res.hEnc,horaApg:res.hApg,horas:parseFloat(res.tiempo),combInicial:res.combI,combFinal:res.combF,combConsumido:parseFloat(res.comb),energiaKwh:parseFloat(res.energ),eficiencia:parseFloat(res.efic),fp:res.fp,observaciones:res.obs};
+      await fetch(sheetsUrl,{method:'POST',mode:'no-cors',body:JSON.stringify(payload)});
+      const hist=JSON.parse(localStorage.getItem('gc_historial')||'[]');
+      hist.unshift({...res,sincronizado:true});
+      localStorage.setItem('gc_historial',JSON.stringify(hist));
+      alert('✅ Enviado a Sheets');
+      limpiar();
+    } catch(e) { alert('❌ Error. Guardado local.'); guardarLocal(); }
+    setEnviando(false);
+  };
+
+  const limpiar = () => {
+    setObs([]);setCombI('');setCombF('');setRes(null);setCliente('');setEquipo('');setHEnc('');setHApg('');
+    localStorage.removeItem('gc_actual');
+  };
+
+  return (
+    <div className="p-4 pb-6 space-y-4">
+      {!res ? (<>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-white font-semibold text-sm">📋 Servicio</h2>
+            <span className="text-slate-500 text-xs">FP: {fp}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <input type="text" value={cliente} onChange={e=>setCliente(e.target.value)} placeholder="Cliente" className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm placeholder-slate-400"/>
+            <select value={equipo} onChange={e=>setEquipo(e.target.value)} className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm">
+              <option value="">Equipo...</option>
+              {equipos.map(eq=><option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div><label className="text-emerald-400 text-xs">🟢 Encendido</label><input type="time" value={hEnc} onChange={e=>setHEnc(e.target.value)} className="w-full bg-slate-700 border border-emerald-600/50 rounded-xl px-3 py-3 text-white text-sm"/></div>
+            <div><label className="text-red-400 text-xs">🔴 Apagado</label><input type="time" value={hApg} onChange={e=>setHApg(e.target.value)} className="w-full bg-slate-700 border border-red-600/50 rounded-xl px-3 py-3 text-white text-sm"/></div>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+          <h2 className="text-white font-semibold mb-3 text-sm">➕ Nueva Lectura</h2>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div><label className="text-slate-400 text-xs">Hora</label><input type="time" value={hora} onChange={e=>setHora(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
+            <div><label className="text-cyan-400 text-xs">Voltaje</label><input type="number" value={volt} onChange={e=>setVolt(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <div><label className="text-red-400 text-xs">L1</label><input type="number" value={l1} onChange={e=>setL1(e.target.value)} placeholder="A" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
+            <div><label className="text-yellow-400 text-xs">L2</label><input type="number" value={l2} onChange={e=>setL2(e.target.value)} placeholder="A" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
+            <div><label className="text-blue-400 text-xs">L3</label><input type="number" value={l3} onChange={e=>setL3(e.target.value)} placeholder="A" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
+          </div>
+          <button onClick={agregar} className="w-full bg-blue-600 active:bg-blue-800 text-white font-semibold py-3 rounded-xl">Agregar</button>
+        </div>
+
+        {obs.length>0&&(
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+            <h2 className="text-white font-semibold mb-3 text-sm">📊 Lecturas ({obs.length})</h2>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {obs.map(o=>(
+                <div key={o.id} className={`rounded-lg p-2 border ${getDbBg(o.desb)}`}>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-amber-400 font-mono">{o.hora}</span>
+                    <span className="text-cyan-400">{o.volt}V</span>
+                    <span className="text-emerald-400">{o.kw.toFixed(1)}kW</span>
+                    <span className={getDbCol(o.desb)}>{o.desb.toFixed(1)}%</span>
+                    <button onClick={()=>setObs(obs.filter(x=>x.id!==o.id))} className="text-red-400">×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <CombustibleSelector equipo={equipo} equipos={equipos} combI={combI} setCombI={setCombI} combF={combF} setCombF={setCombF} />
+
+        <div className="flex gap-2">
+          <button onClick={limpiar} className="flex-1 bg-slate-700 text-slate-300 py-3 rounded-xl">🗑️ Limpiar</button>
+          <button onClick={calcular} className="flex-[2] bg-amber-500 text-slate-900 font-bold py-3 rounded-xl">📊 Calcular</button>
+        </div>
+      </>) : (<>
+        <div className="bg-slate-800 rounded-xl p-4 border border-emerald-600">
+          <h2 className="text-emerald-400 font-semibold mb-3">✅ Resultados</h2>
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div className="bg-slate-700/50 rounded-lg p-3"><p className="text-slate-400 text-xs">Combustible</p><p className="text-2xl font-bold text-amber-400">{res.comb} L</p></div>
+            <div className="bg-slate-700/50 rounded-lg p-3"><p className="text-slate-400 text-xs">Tiempo</p><p className="text-2xl font-bold text-blue-400">{res.tiempo} h</p></div>
+            <div className="bg-slate-700/50 rounded-lg p-3"><p className="text-slate-400 text-xs">Energía</p><p className="text-2xl font-bold text-emerald-400">{res.energ} kWh</p></div>
+            <div className="bg-slate-700/50 rounded-lg p-3"><p className="text-slate-400 text-xs">Consumo/h</p><p className="text-2xl font-bold text-purple-400">{res.combH} L/h</p></div>
+            <div className="bg-slate-700/50 rounded-lg p-3 col-span-2"><p className="text-slate-400 text-xs">Eficiencia</p><p className="text-3xl font-bold text-cyan-400">{res.efic} kWh/L</p></div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-slate-700 text-sm text-center">
+            <span className="text-slate-400">Carga: </span><span className="text-purple-400 font-bold">{res.cargaProm}%</span>
+            <span className="text-slate-400 ml-4">Desbalance: </span><span className={getDbCol(parseFloat(res.pDb))}>{res.pDb}%</span>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <button onClick={guardarYEnviar} disabled={enviando} className="w-full bg-emerald-600 disabled:opacity-50 text-white font-bold py-4 rounded-xl">
+            {enviando ? '⏳ Enviando...' : '☁️ Guardar y Enviar'}
+          </button>
+          <button onClick={guardarLocal} className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl">💾 Solo Local</button>
+          <button onClick={()=>setRes(null)} className="w-full bg-slate-700 text-slate-300 py-3 rounded-xl">← Editar</button>
+        </div>
+      </>)}
+    </div>
+  );
+}
+
+function Historial({sheetsUrl}) {
+  const [hist, setHist] = useState([]);
+  const [enviando, setEnviando] = useState(null);
+
+  useEffect(() => { setHist(JSON.parse(localStorage.getItem('gc_historial')||'[]')); }, []);
+
+  const sincronizar = async (item, idx) => {
+    if(!sheetsUrl){alert('Configure URL de Sheets');return;}
+    setEnviando(idx);
+    try {
+      const payload = {id:item.id,fecha:item.fecha,equipo:item.equipo,cliente:item.cliente,horaEnc:item.hEnc,horaApg:item.hApg,horas:parseFloat(item.tiempo),combInicial:item.combI,combFinal:item.combF,combConsumido:parseFloat(item.comb),energiaKwh:parseFloat(item.energ),eficiencia:parseFloat(item.efic),fp:item.fp,observaciones:item.obs};
+      await fetch(sheetsUrl,{method:'POST',mode:'no-cors',body:JSON.stringify(payload)});
+      const newHist = [...hist]; newHist[idx].sincronizado = true; setHist(newHist);
+      localStorage.setItem('gc_historial',JSON.stringify(newHist));
+      alert('✅ Sincronizado');
+    } catch(e) { alert('❌ Error'); }
+    setEnviando(null);
+  };
+
+  const eliminar = (idx) => {
+    if(!confirm('¿Eliminar?'))return;
+    const newHist = hist.filter((_,i)=>i!==idx); setHist(newHist);
+    localStorage.setItem('gc_historial',JSON.stringify(newHist));
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-white font-semibold">📋 Historial</h2>
+        {hist.filter(h=>!h.sincronizado).length > 0 && <span className="bg-amber-500 text-slate-900 text-xs px-2 py-1 rounded-full">{hist.filter(h=>!h.sincronizado).length} pend.</span>}
+      </div>
+      {hist.length === 0 ? <p className="text-slate-500 text-center py-8">Sin registros</p> : (
+        <div className="space-y-3">
+          {hist.map((h, idx) => (
+            <div key={h.id} className={`bg-slate-800 rounded-xl p-4 border ${h.sincronizado?'border-emerald-600/50':'border-amber-600/50'}`}>
+              <div className="flex justify-between items-start mb-2">
+                <div><p className="text-white font-medium">{h.cliente || '-'}</p><p className="text-slate-400 text-xs">{h.equipo} • {h.fecha}</p></div>
+                <span className={`text-xs px-2 py-1 rounded ${h.sincronizado?'bg-emerald-500/20 text-emerald-400':'bg-amber-500/20 text-amber-400'}`}>{h.sincronizado ? '✓' : '⏳'}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center text-sm mb-3">
+                <div><p className="text-slate-500 text-xs">Tiempo</p><p className="text-blue-400">{h.tiempo}h</p></div>
+                <div><p className="text-slate-500 text-xs">Comb.</p><p className="text-amber-400">{h.comb}L</p></div>
+                <div><p className="text-slate-500 text-xs">Energía</p><p className="text-emerald-400">{h.energ}</p></div>
+                <div><p className="text-slate-500 text-xs">Efic.</p><p className="text-cyan-400">{h.efic}</p></div>
+              </div>
+              <div className="flex gap-2">
+                {!h.sincronizado && <button onClick={()=>sincronizar(h,idx)} disabled={enviando===idx} className="flex-1 bg-emerald-600 text-white text-sm py-2 rounded-lg">{enviando===idx ? '⏳' : '☁️ Sync'}</button>}
+                <button onClick={()=>eliminar(idx)} className="bg-red-600/20 text-red-400 text-sm py-2 px-3 rounded-lg">🗑️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Estadisticas() {
+  const [hist, setHist] = useState([]);
+  const [equipos, setEquipos] = useState([]);
+  const [selEq, setSelEq] = useState('todos');
+
+  useEffect(() => {
+    setHist(JSON.parse(localStorage.getItem('gc_historial')||'[]'));
+    setEquipos(JSON.parse(localStorage.getItem('gc_equipos')||'[]'));
+  }, []);
+
+  const filtrado = selEq === 'todos' ? hist : hist.filter(h => h.equipo === selEq);
+
+  const todasObs = [];
+  filtrado.forEach(servicio => {
+    if (servicio.obs?.length > 0) {
+      const combPorObs = parseFloat(servicio.comb) / servicio.obs.length;
+      const tiempoPorObs = parseFloat(servicio.tiempo) / servicio.obs.length;
+      servicio.obs.forEach(ob => {
+        const promAmp = (parseFloat(ob.l1) + parseFloat(ob.l2) + parseFloat(ob.l3)) / 3;
+        todasObs.push({...ob,promAmp,combAsignado: combPorObs,tiempoAsignado: tiempoPorObs});
+      });
+    }
+  });
+
+  const rangos = [];
+  for (let i = 0; i < 200; i += 10) rangos.push({ min: i, max: i + 10, label: `${i}-${i+10}A`, obs: [] });
+  todasObs.forEach(ob => { const rango = rangos.find(r => ob.promAmp >= r.min && ob.promAmp < r.max); if (rango) rango.obs.push(ob); });
+
+  const rangosConDatos = rangos.map(r => {
+    if (r.obs.length === 0) return { ...r, consumo: 0, muestras: 0 };
+    const totalComb = r.obs.reduce((s, o) => s + o.combAsignado, 0);
+    const totalTiempo = r.obs.reduce((s, o) => s + o.tiempoAsignado, 0);
+    return { ...r, consumo: totalComb / totalTiempo, muestras: r.obs.length };
+  });
+
+  const maxConsumo = Math.max(...rangosConDatos.map(r => r.consumo), 1);
+  const totalHoras = filtrado.reduce((s, h) => s + parseFloat(h.tiempo), 0);
+  const totalComb = filtrado.reduce((s, h) => s + parseFloat(h.comb), 0);
+  const promCombH = totalHoras > 0 ? totalComb / totalHoras : 0;
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <label className="text-slate-400 text-sm">Equipo:</label>
+        <select value={selEq} onChange={e=>setSelEq(e.target.value)} className="w-full mt-2 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white">
+          <option value="todos">Todos</option>
+          {equipos.map(eq=><option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center"><p className="text-slate-400 text-xs">Servicios</p><p className="text-3xl font-bold text-white">{filtrado.length}</p></div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center"><p className="text-slate-400 text-xs">Observaciones</p><p className="text-3xl font-bold text-purple-400">{todasObs.length}</p></div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center"><p className="text-slate-400 text-xs">Horas</p><p className="text-3xl font-bold text-blue-400">{totalHoras.toFixed(1)}</p></div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center"><p className="text-slate-400 text-xs">Combustible</p><p className="text-3xl font-bold text-amber-400">{totalComb.toFixed(0)}L</p></div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-cyan-600 text-center col-span-2"><p className="text-slate-400 text-xs">Consumo Promedio</p><p className="text-4xl font-bold text-cyan-400">{promCombH.toFixed(2)} L/h</p></div>
+      </div>
+
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h3 className="text-white font-semibold mb-1">📊 Consumo por Amperaje</h3>
+        <p className="text-slate-500 text-xs mb-4">Promedio de 3 fases • Rangos de 10A</p>
+        {rangosConDatos.filter(r=>r.muestras>0).length === 0 ? (
+          <p className="text-slate-500 text-center py-4">Sin datos</p>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {rangosConDatos.map((r, i) => r.muestras > 0 && (
+              <div key={i}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-slate-300 font-mono">{r.label}</span>
+                  <div className="flex gap-3">
+                    <span className="text-slate-500 text-xs">{r.muestras}</span>
+                    <span className="text-amber-400 font-medium">{r.consumo.toFixed(2)} L/h</span>
+                  </div>
+                </div>
+                <div className="h-4 bg-slate-700 rounded overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded" style={{width: `${(r.consumo / maxConsumo) * 100}%`}} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Config({sheetsUrl, setSheetsUrl}) {
+  const [url, setUrl] = useState(sheetsUrl);
+  const [fpGlobal, setFpGlobal] = useState(() => localStorage.getItem('gc_fp') || '0.8');
+  const [equipos, setEquipos] = useState([]);
+  const [nuevoEq, setNuevoEq] = useState({id:'',nombre:'',potencia:'',tanque:''});
+
+  useEffect(() => { setEquipos(JSON.parse(localStorage.getItem('gc_equipos')||'[]')); }, []);
+
+  const guardarUrl = () => { localStorage.setItem(SHEETS_URL_KEY, url); setSheetsUrl(url); alert('✅ URL guardada'); };
+  const guardarFp = () => { localStorage.setItem('gc_fp', fpGlobal); alert('✅ FP guardado'); };
+
+  const agregarEquipo = () => {
+    if(!nuevoEq.id||!nuevoEq.nombre||!nuevoEq.potencia||!nuevoEq.tanque){alert('Complete todo');return;}
+    const nuevo = [...equipos, {id:nuevoEq.id,nombre:nuevoEq.nombre,potencia:parseFloat(nuevoEq.potencia),tanque:parseFloat(nuevoEq.tanque)}];
+    setEquipos(nuevo); localStorage.setItem('gc_equipos',JSON.stringify(nuevo));
+    setNuevoEq({id:'',nombre:'',potencia:'',tanque:''});
+  };
+
+  const eliminarEquipo = (id) => { const nuevo = equipos.filter(e=>e.id!==id); setEquipos(nuevo); localStorage.setItem('gc_equipos',JSON.stringify(nuevo)); };
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h2 className="text-white font-semibold mb-3">🔗 Google Sheets</h2>
+        <input type="url" value={url} onChange={e=>setUrl(e.target.value)} placeholder="URL del Script..." className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"/>
+        <button onClick={guardarUrl} className="w-full mt-3 bg-emerald-600 text-white py-2 rounded-lg">💾 Guardar URL</button>
+      </div>
+
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h2 className="text-white font-semibold mb-3">⚡ Factor de Potencia</h2>
+        <div className="flex gap-2">
+          <input type="number" step="0.05" value={fpGlobal} onChange={e=>setFpGlobal(e.target.value)} className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-lg font-bold text-center"/>
+          <button onClick={guardarFp} className="bg-emerald-600 text-white px-4 py-2 rounded-lg">💾</button>
+        </div>
+      </div>
+
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h2 className="text-white font-semibold mb-3">🔧 Equipos</h2>
+        <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+          {equipos.length===0 ? <p className="text-slate-500 text-sm">Sin equipos</p> : 
+            equipos.map(eq => (
+              <div key={eq.id} className="flex justify-between items-center bg-slate-700/50 rounded-lg p-2">
+                <div><p className="text-white text-sm">{eq.nombre}</p><p className="text-slate-400 text-xs">{eq.id} • {eq.potencia}kW • {eq.tanque}L</p></div>
+                <button onClick={()=>eliminarEquipo(eq.id)} className="text-red-400">×</button>
+              </div>
+            ))
+          }
+        </div>
+        <div className="border-t border-slate-700 pt-3">
+          <p className="text-slate-400 text-xs mb-2">Agregar:</p>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input type="text" value={nuevoEq.id} onChange={e=>setNuevoEq({...nuevoEq,id:e.target.value})} placeholder="ID" className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
+            <input type="text" value={nuevoEq.nombre} onChange={e=>setNuevoEq({...nuevoEq,nombre:e.target.value})} placeholder="Nombre" className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
+            <input type="number" value={nuevoEq.potencia} onChange={e=>setNuevoEq({...nuevoEq,potencia:e.target.value})} placeholder="kW" className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
+            <input type="number" value={nuevoEq.tanque} onChange={e=>setNuevoEq({...nuevoEq,tanque:e.target.value})} placeholder="Tanque (L)" className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
+          </div>
+          <button onClick={agregarEquipo} className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm">+ Agregar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App/>, document.getElementById('root'));
+</script>
 </body>
 </html>
