@@ -3,21 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#f59e0b">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>GenControl</title>
-  <link rel="manifest" href="data:application/json,{%22name%22:%22GenControl%22,%22short_name%22:%22GenControl%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%230f172a%22,%22theme_color%22:%22%230f172a%22}">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GenControl">
+  <title>GenControl Mobile</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%23f59e0b' width='100' height='100' rx='15'/%3E%3Cpath d='M55 15L25 55h20L35 85 75 45H55L65 15z' fill='%23000'/%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%23f59e0b' width='100' height='100' rx='15'/%3E%3Cpath d='M55 15L25 55h20L35 85 75 45H55L65 15z' fill='%23000'/%3E%3C/svg%3E">
+  <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22GenControl%22%2C%22short_name%22%3A%22GenControl%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f172a%22%2C%22theme_color%22%3A%22%23f59e0b%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%25200%2520100%2520100%27%253E%253Crect%2520fill%3D%27%2523f59e0b%27%2520width%3D%27100%27%2520height%3D%27100%27%2520rx%3D%2715%27%2F%253E%253Cpath%2520d%3D%27M55%252015L25%252055h20L35%252085%252075%252045H55L65%252015z%27%2520fill%3D%27%2523000%27%2F%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>*{-webkit-tap-highlight-color:transparent}body{margin:0}input,select{font-size:16px!important}</style>
+  <style>*{-webkit-tap-highlight-color:transparent}body{margin:0}input,select{font-size:16px!important}.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}</style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect} = React;
+const {useState, useEffect, useRef} = React;
 
+// ============================================
+// CONSTANTES
+// ============================================
 const FRACCIONES = [
   {valor: 0, label: 'E', desc: 'Vacío'},
   {valor: 1/16, label: '1/16', desc: '1/16'},
@@ -39,29 +46,79 @@ const FRACCIONES = [
 ];
 
 const SHEETS_URL_KEY = 'gc_sheets_url';
+const HOY = () => new Date().toISOString().split('T')[0];
+const AHORA = () => new Date().toTimeString().slice(0,5);
 
+// ============================================
+// FUNCIONES AUXILIARES
+// ============================================
+async function cargarDatosDesdeSheets(url) {
+  if (!url) return null;
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data.success) {
+      if (data.equipos) localStorage.setItem('gc_equipos', JSON.stringify(data.equipos));
+      if (data.operadores) localStorage.setItem('gc_operadores', JSON.stringify(data.operadores));
+      if (data.clientes) localStorage.setItem('gc_clientes', JSON.stringify(data.clientes));
+      return data;
+    }
+  } catch (e) {
+    console.log('Error cargando datos:', e);
+  }
+  return null;
+}
+
+const calcDesb = (a1,a2,a3) => {
+  const p = (a1+a2+a3)/3;
+  return p === 0 ? 0 : (Math.max(Math.abs(a1-p),Math.abs(a2-p),Math.abs(a3-p))/p)*100;
+};
+
+const getDbCol = d => d<=5?'text-emerald-400':d<=10?'text-yellow-400':'text-red-400';
+const getDbBg = d => d<=5?'border-emerald-500/50 bg-emerald-500/10':d<=10?'border-yellow-500/50 bg-yellow-500/10':'border-red-500/50 bg-red-500/10';
+
+const calcularHorasEntreFechas = (fechaEnc, horaEnc, fechaApg, horaApg) => {
+  const inicio = new Date(`${fechaEnc}T${horaEnc}`);
+  const fin = new Date(`${fechaApg}T${horaApg}`);
+  const diffMs = fin - inicio;
+  return diffMs / (1000 * 60 * 60);
+};
+
+// ============================================
+// APP PRINCIPAL
+// ============================================
 function App() {
   const [vista, setVista] = useState('registro');
   const [sheetsUrl, setSheetsUrl] = useState('');
+  const [datosCargados, setDatosCargados] = useState(false);
   
-  useEffect(() => { setSheetsUrl(localStorage.getItem(SHEETS_URL_KEY) || ''); }, []);
+  useEffect(() => {
+    const url = localStorage.getItem(SHEETS_URL_KEY) || '';
+    setSheetsUrl(url);
+    
+    if (url && !datosCargados) {
+      cargarDatosDesdeSheets(url).then(data => {
+        if (data) setDatosCargados(true);
+      });
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
       <div className="bg-slate-800/90 backdrop-blur sticky top-0 z-20 px-4 py-3 border-b border-slate-700">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-bold text-white">⚡ GenControl</h1>
+          <h1 className="text-lg font-bold text-amber-500">⚡ GenControl</h1>
           <div className="flex gap-1">
             {['registro','historial','stats','config'].map(v => (
               <button key={v} onClick={() => setVista(v)}
-                className={`px-3 py-1 rounded-lg text-xs font-medium ${vista===v?'bg-amber-500 text-slate-900':'bg-slate-700 text-slate-300'}`}>
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${vista===v?'bg-amber-500 text-slate-900':'bg-slate-700 text-slate-300'}`}>
                 {v==='registro'?'📝':v==='historial'?'📋':v==='stats'?'📊':'⚙️'}
               </button>
             ))}
           </div>
         </div>
       </div>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-lg mx-auto">
         {vista === 'registro' && <Registro sheetsUrl={sheetsUrl} />}
         {vista === 'historial' && <Historial sheetsUrl={sheetsUrl} />}
         {vista === 'stats' && <Estadisticas />}
@@ -71,11 +128,13 @@ function App() {
   );
 }
 
-function CombustibleSelector({equipo, equipos, combI, setCombI, combF, setCombF}) {
+// ============================================
+// SELECTOR DE COMBUSTIBLE
+// ============================================
+function CombustibleSelector({equipo, equipos, valor, setValor, tipo, label}) {
   const eqInfo = equipos.find(e => e.id === equipo);
   const capacidad = eqInfo?.tanque || 0;
-  const [descI, setDescI] = useState('');
-  const [descF, setDescF] = useState('');
+  const [desc, setDesc] = useState('');
   
   const getFraccion = (litros) => {
     if (!capacidad || !litros) return null;
@@ -83,236 +142,533 @@ function CombustibleSelector({equipo, equipos, combI, setCombI, combF, setCombF}
     return FRACCIONES.reduce((prev, curr) => Math.abs(curr.valor - frac) < Math.abs(prev.valor - frac) ? curr : prev);
   };
 
-  const fracI = getFraccion(combI);
-  const fracF = getFraccion(combF);
+  const fracSelec = getFraccion(valor);
+  const colorClass = tipo === 'inicial' ? 'emerald' : 'red';
 
-  const renderBotones = (tipo, fracSelec, setVal, setDesc) => (
-    <div className="space-y-1">
-      <div className="grid grid-cols-9 gap-1">
-        {FRACCIONES.slice(0, 9).map((f, i) => (
-          <button key={i} onClick={() => {setVal((f.valor * capacidad).toString()); setDesc(f.desc);}}
-            className={`py-2 rounded text-xs font-medium ${
-              fracSelec?.valor === f.valor 
-                ? tipo === 'inicial' ? 'bg-emerald-500 text-white ring-2 ring-emerald-400' : 'bg-red-500 text-white ring-2 ring-red-400'
-                : 'bg-slate-700 text-slate-400'
-            }`}>{f.label}</button>
-        ))}
+  if (!equipo || capacidad === 0) {
+    return <p className="text-amber-400 text-sm text-center py-2">Seleccione equipo</p>;
+  }
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-2">
+        <label className={`text-${colorClass}-400 text-xs font-medium`}>{label} {desc && `(${desc})`}</label>
+        <span className="text-white font-bold">{valor ? `${parseFloat(valor).toFixed(1)}L` : '-'}</span>
       </div>
-      <div className="grid grid-cols-8 gap-1">
-        {FRACCIONES.slice(9).map((f, i) => (
-          <button key={i} onClick={() => {setVal((f.valor * capacidad).toString()); setDesc(f.desc);}}
-            className={`py-2 rounded text-xs font-medium ${
-              fracSelec?.valor === f.valor 
-                ? tipo === 'inicial' ? 'bg-emerald-500 text-white ring-2 ring-emerald-400' : 'bg-red-500 text-white ring-2 ring-red-400'
-                : 'bg-slate-700 text-slate-400'
-            }`}>{f.label}</button>
-        ))}
+      <div className="space-y-1">
+        <div className="grid grid-cols-9 gap-1">
+          {FRACCIONES.slice(0, 9).map((f, i) => (
+            <button key={i} onClick={() => {setValor((f.valor * capacidad).toString()); setDesc(f.desc);}}
+              className={`py-2 rounded text-xs font-medium transition-all ${
+                fracSelec?.valor === f.valor 
+                  ? `bg-${colorClass}-500 text-white ring-2 ring-${colorClass}-400`
+                  : 'bg-slate-700 text-slate-400 active:bg-slate-600'
+              }`}>{f.label}</button>
+          ))}
+        </div>
+        <div className="grid grid-cols-8 gap-1">
+          {FRACCIONES.slice(9).map((f, i) => (
+            <button key={i} onClick={() => {setValor((f.valor * capacidad).toString()); setDesc(f.desc);}}
+              className={`py-2 rounded text-xs font-medium transition-all ${
+                fracSelec?.valor === f.valor 
+                  ? `bg-${colorClass}-500 text-white ring-2 ring-${colorClass}-400`
+                  : 'bg-slate-700 text-slate-400 active:bg-slate-600'
+              }`}>{f.label}</button>
+          ))}
+        </div>
       </div>
     </div>
   );
+}
+
+// ============================================
+// COMPONENTE DE RECARGAS
+// ============================================
+function RecargasSection({equipo, equipos, recargas, setRecargas}) {
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [fechaRec, setFechaRec] = useState(HOY());
+  const [horaRec, setHoraRec] = useState(AHORA());
+  const [nivelAntes, setNivelAntes] = useState('');
+  const [nivelDespues, setNivelDespues] = useState('');
+  
+  const eqInfo = equipos.find(e => e.id === equipo);
+  const capacidad = eqInfo?.tanque || 0;
+
+  const getFraccionInfo = (litros) => {
+    if (!capacidad || !litros) return null;
+    const frac = parseFloat(litros) / capacidad;
+    return FRACCIONES.reduce((prev, curr) => Math.abs(curr.valor - frac) < Math.abs(prev.valor - frac) ? curr : prev);
+  };
+
+  const agregarRecarga = () => {
+    if (!nivelAntes || !nivelDespues) {
+      alert('Seleccione nivel antes y después');
+      return;
+    }
+    const litrosAntes = parseFloat(nivelAntes);
+    const litrosDespues = parseFloat(nivelDespues);
+    if (litrosDespues <= litrosAntes) {
+      alert('El nivel después debe ser mayor que antes');
+      return;
+    }
+    
+    const fracAntes = getFraccionInfo(litrosAntes);
+    const fracDespues = getFraccionInfo(litrosDespues);
+    
+    setRecargas([...recargas, {
+      id: Date.now(),
+      fecha: fechaRec,
+      hora: horaRec,
+      nivelAntes: fracAntes?.desc || '',
+      nivelDespues: fracDespues?.desc || '',
+      litrosAntes,
+      litrosDespues,
+      litrosAgregados: litrosDespues - litrosAntes
+    }]);
+    
+    setNivelAntes('');
+    setNivelDespues('');
+    setMostrarForm(false);
+  };
+
+  const totalRecargas = recargas.reduce((s, r) => s + r.litrosAgregados, 0);
+
+  if (!equipo || capacidad === 0) return null;
 
   return (
     <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
       <div className="flex justify-between items-center mb-3">
-        <h2 className="text-white font-semibold text-sm">⛽ Combustible</h2>
-        {capacidad > 0 && <span className="text-slate-400 text-xs">Tanque: {capacidad}L</span>}
+        <h2 className="text-white font-semibold text-sm">🛢️ Recargas</h2>
+        {totalRecargas > 0 && <span className="text-amber-400 font-bold">+{totalRecargas.toFixed(1)} L</span>}
       </div>
-      
-      {!equipo || capacidad === 0 ? (
-        <p className="text-amber-400 text-sm text-center py-4">⚠️ Seleccione equipo con tanque</p>
+
+      {recargas.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {recargas.map(r => (
+            <div key={r.id} className="bg-slate-700/50 rounded-lg p-2 flex justify-between items-center">
+              <div>
+                <span className="text-slate-400 text-xs">{r.fecha} {r.hora}</span>
+                <p className="text-slate-300 text-sm">{r.nivelAntes} → {r.nivelDespues}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-amber-400 font-bold">+{r.litrosAgregados.toFixed(1)} L</span>
+                <button onClick={() => setRecargas(recargas.filter(x => x.id !== r.id))} className="text-red-400 text-lg">×</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!mostrarForm ? (
+        <button onClick={() => setMostrarForm(true)} className="w-full bg-slate-700 text-slate-300 py-2 rounded-lg text-sm">
+          ➕ Agregar Recarga
+        </button>
       ) : (
-        <div className="space-y-4">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-emerald-400 text-xs font-medium">🟢 Inicial {descI && `(${descI})`}</label>
-              <span className="text-white font-bold">{combI ? `${parseFloat(combI).toFixed(1)}L` : '-'}</span>
+        <div className="space-y-3 border-t border-slate-700 pt-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-slate-400 text-xs">Fecha</label>
+              <input type="date" value={fechaRec} onChange={e => setFechaRec(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
             </div>
-            {renderBotones('inicial', fracI, setCombI, setDescI)}
+            <div>
+              <label className="text-slate-400 text-xs">Hora</label>
+              <input type="time" value={horaRec} onChange={e => setHoraRec(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
+            </div>
           </div>
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-red-400 text-xs font-medium">🔴 Final {descF && `(${descF})`}</label>
-              <span className="text-white font-bold">{combF ? `${parseFloat(combF).toFixed(1)}L` : '-'}</span>
-            </div>
-            {renderBotones('final', fracF, setCombF, setDescF)}
+          
+          <CombustibleSelector equipo={equipo} equipos={equipos} valor={nivelAntes} setValor={setNivelAntes} tipo="final" label="🔴 Nivel ANTES de recargar"/>
+          <CombustibleSelector equipo={equipo} equipos={equipos} valor={nivelDespues} setValor={setNivelDespues} tipo="inicial" label="🟢 Nivel DESPUÉS de recargar"/>
+          
+          <div className="flex gap-2">
+            <button onClick={() => setMostrarForm(false)} className="flex-1 bg-slate-700 text-slate-300 py-2 rounded-lg text-sm">Cancelar</button>
+            <button onClick={agregarRecarga} className="flex-1 bg-amber-500 text-slate-900 font-semibold py-2 rounded-lg text-sm">Guardar</button>
           </div>
-          {combI && combF && (
-            <div className="bg-slate-700/50 rounded-lg p-3">
-              <div className="h-3 bg-slate-700 rounded-full overflow-hidden flex mb-2">
-                <div className="h-full bg-amber-500" style={{width: `${(parseFloat(combF)/capacidad)*100}%`}} />
-                <div className="h-full bg-amber-500/30" style={{width: `${((parseFloat(combI)-parseFloat(combF))/capacidad)*100}%`}} />
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 text-sm">Consumido:</span>
-                <span className="text-amber-400 font-bold text-lg">{(parseFloat(combI) - parseFloat(combF)).toFixed(1)} L</span>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
   );
 }
 
+// ============================================
+// REGISTRO DE SERVICIO
+// ============================================
 function Registro({sheetsUrl}) {
+  // Estados principales
   const [obs, setObs] = useState([]);
+  const [recargas, setRecargas] = useState([]);
+  const [res, setRes] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  
+  // Datos del servicio
+  const [equipo, setEquipo] = useState('');
+  const [operador, setOperador] = useState('');
+  const [cliente, setCliente] = useState('');
+  const [clienteManual, setClienteManual] = useState('');
+  const [fechaEnc, setFechaEnc] = useState(HOY());
+  const [horaEnc, setHoraEnc] = useState('');
+  const [fechaApg, setFechaApg] = useState('');
+  const [horaApg, setHoraApg] = useState('');
+  const [combI, setCombI] = useState('');
+  const [combF, setCombF] = useState('');
+  
+  // Nueva lectura
+  const [fechaObs, setFechaObs] = useState(HOY());
   const [hora, setHora] = useState('');
   const [l1, setL1] = useState('');
   const [l2, setL2] = useState('');
   const [l3, setL3] = useState('');
   const [volt, setVolt] = useState('220');
-  const [combI, setCombI] = useState('');
-  const [combF, setCombF] = useState('');
-  const [res, setRes] = useState(null);
-  const fp = localStorage.getItem('gc_fp') || '0.8';
-  const [cliente, setCliente] = useState('');
-  const [equipo, setEquipo] = useState('');
-  const [hEnc, setHEnc] = useState('');
-  const [hApg, setHApg] = useState('');
-  const [enviando, setEnviando] = useState(false);
+  
+  // Datos de catálogos
   const [equipos, setEquipos] = useState([]);
+  const [operadores, setOperadores] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const fp = localStorage.getItem('gc_fp') || '0.8';
 
+  // Cargar datos al iniciar
   useEffect(() => {
     setEquipos(JSON.parse(localStorage.getItem('gc_equipos') || '[]'));
-    const s = localStorage.getItem('gc_actual');
-    if (s) { const d = JSON.parse(s); setObs(d.obs||[]); setCliente(d.cli||''); setEquipo(d.eq||''); setCombI(d.ci||''); setCombF(d.cf||''); setHEnc(d.he||''); setHApg(d.ha||''); }
+    setOperadores(JSON.parse(localStorage.getItem('gc_operadores') || '[]'));
+    setClientes(JSON.parse(localStorage.getItem('gc_clientes') || '[]'));
+    
+    // Recuperar servicio en progreso
+    const guardado = localStorage.getItem('gc_actual');
+    if (guardado) {
+      const d = JSON.parse(guardado);
+      setObs(d.obs || []);
+      setRecargas(d.recargas || []);
+      setEquipo(d.equipo || '');
+      setOperador(d.operador || '');
+      setCliente(d.cliente || '');
+      setClienteManual(d.clienteManual || '');
+      setFechaEnc(d.fechaEnc || HOY());
+      setHoraEnc(d.horaEnc || '');
+      setFechaApg(d.fechaApg || '');
+      setHoraApg(d.horaApg || '');
+      setCombI(d.combI || '');
+      setCombF(d.combF || '');
+    }
   }, []);
 
+  // Auto-guardar cambios
   useEffect(() => {
-    localStorage.setItem('gc_actual', JSON.stringify({obs,cli:cliente,eq:equipo,ci:combI,cf:combF,he:hEnc,ha:hApg}));
-  }, [obs,cliente,equipo,combI,combF,hEnc,hApg]);
+    const data = {obs, recargas, equipo, operador, cliente, clienteManual, fechaEnc, horaEnc, fechaApg, horaApg, combI, combF};
+    localStorage.setItem('gc_actual', JSON.stringify(data));
+  }, [obs, recargas, equipo, operador, cliente, clienteManual, fechaEnc, horaEnc, fechaApg, horaApg, combI, combF]);
 
-  const calcDesb = (a1,a2,a3) => {const p=(a1+a2+a3)/3;return p===0?0:(Math.max(Math.abs(a1-p),Math.abs(a2-p),Math.abs(a3-p))/p)*100;};
-  const getDbCol = d => d<=5?'text-emerald-400':d<=10?'text-yellow-400':'text-red-400';
-  const getDbBg = d => d<=5?'border-emerald-500/50 bg-emerald-500/10':d<=10?'border-yellow-500/50 bg-yellow-500/10':'border-red-500/50 bg-red-500/10';
-  const parseH = h => {const[hr,mn]=h.split(':').map(Number);return hr+mn/60;};
-
-  const agregar = () => {
-    if(!hora||!l1||!l2||!l3||!volt){alert('Complete todos los campos');return;}
-    const v=parseFloat(volt),f=parseFloat(fp),a1=parseFloat(l1),a2=parseFloat(l2),a3=parseFloat(l3);
-    const kw=(v*(a1+a2+a3)*f)/1000,desb=calcDesb(a1,a2,a3);
-    setObs([...obs,{id:Date.now(),hora,l1:a1,l2:a2,l3:a3,volt:v,kw,desb,fp:f}].sort((a,b)=>a.hora.localeCompare(b.hora)));
-    setHora('');setL1('');setL2('');setL3('');
+  const agregarObs = () => {
+    if(!hora || !l1 || !l2 || !l3 || !volt) {
+      alert('Complete todos los campos de la lectura');
+      return;
+    }
+    const v = parseFloat(volt), f = parseFloat(fp);
+    const a1 = parseFloat(l1), a2 = parseFloat(l2), a3 = parseFloat(l3);
+    const kw = (v * (a1 + a2 + a3) * f) / 1000;
+    const desb = calcDesb(a1, a2, a3);
+    const eqInfo = equipos.find(e => e.id === equipo);
+    const potNom = eqInfo?.potencia || 100;
+    const carga = (kw / potNom) * 100;
+    
+    const nuevaObs = {
+      id: Date.now(),
+      fecha: fechaObs,
+      hora,
+      l1: a1, l2: a2, l3: a3,
+      volt: v, kw, desb, fp: f, carga
+    };
+    
+    setObs([...obs, nuevaObs].sort((a, b) => {
+      const dtA = new Date(`${a.fecha}T${a.hora}`);
+      const dtB = new Date(`${b.fecha}T${b.hora}`);
+      return dtA - dtB;
+    }));
+    
+    setHora('');
+    setL1(''); setL2(''); setL3('');
   };
 
   const calcular = () => {
-    const ci=parseFloat(combI),cf=parseFloat(combF);
-    if(obs.length<1){alert('Necesita al menos 1 observación');return;}
-    if(isNaN(ci)||isNaN(cf)){alert('Ingrese combustible');return;}
-    if(!hEnc||!hApg){alert('Ingrese hora de encendido y apagado');return;}
+    const ci = parseFloat(combI);
+    const cf = parseFloat(combF);
+    const totalRecargas = recargas.reduce((s, r) => s + r.litrosAgregados, 0);
     
-    const combustible=ci-cf;
-    let energia=0;
-    const he=parseH(hEnc);
-    let ha=parseH(hApg);if(ha<=he)ha+=24;
-    const sorted=[...obs].sort((a,b)=>a.hora.localeCompare(b.hora));
+    if (obs.length < 1) { alert('Necesita al menos 1 observación'); return; }
+    if (isNaN(ci) || isNaN(cf)) { alert('Ingrese combustible inicial y final'); return; }
+    if (!horaEnc || !horaApg || !fechaEnc || !fechaApg) { alert('Ingrese fecha y hora de encendido/apagado'); return; }
+    if (!operador) { alert('Seleccione un operador'); return; }
     
-    if(sorted.length===1){energia=sorted[0].kw*(ha-he);}
-    else{
-      const hP=parseH(sorted[0].hora);if(hP>he)energia+=sorted[0].kw*(hP-he);
-      for(let i=1;i<sorted.length;i++){
-        const h1=parseH(sorted[i-1].hora),h2=parseH(sorted[i].hora);
-        let diff=h2-h1;if(diff<0)diff+=24;
-        energia+=((sorted[i-1].kw+sorted[i].kw)/2)*diff;
+    const combustible = ci + totalRecargas - cf;
+    const horasTotales = calcularHorasEntreFechas(fechaEnc, horaEnc, fechaApg, horaApg);
+    
+    if (horasTotales <= 0) { alert('La fecha/hora de apagado debe ser posterior al encendido'); return; }
+    
+    // Calcular energía por integración
+    let energia = 0;
+    const inicio = new Date(`${fechaEnc}T${horaEnc}`);
+    const fin = new Date(`${fechaApg}T${horaApg}`);
+    const sorted = [...obs].sort((a, b) => new Date(`${a.fecha}T${a.hora}`) - new Date(`${b.fecha}T${b.hora}`));
+    
+    if (sorted.length === 1) {
+      energia = sorted[0].kw * horasTotales;
+    } else {
+      // Energía antes de primera observación
+      const primeraObs = new Date(`${sorted[0].fecha}T${sorted[0].hora}`);
+      if (primeraObs > inicio) {
+        energia += sorted[0].kw * ((primeraObs - inicio) / (1000 * 60 * 60));
       }
-      let hU=parseH(sorted[sorted.length-1].hora);if(hU<he)hU+=24;
-      if(ha>hU)energia+=sorted[sorted.length-1].kw*(ha-hU);
+      
+      // Integración trapezoidal entre observaciones
+      for (let i = 1; i < sorted.length; i++) {
+        const t1 = new Date(`${sorted[i-1].fecha}T${sorted[i-1].hora}`);
+        const t2 = new Date(`${sorted[i].fecha}T${sorted[i].hora}`);
+        const diffH = (t2 - t1) / (1000 * 60 * 60);
+        energia += ((sorted[i-1].kw + sorted[i].kw) / 2) * diffH;
+      }
+      
+      // Energía después de última observación
+      const ultimaObs = new Date(`${sorted[sorted.length-1].fecha}T${sorted[sorted.length-1].hora}`);
+      if (fin > ultimaObs) {
+        energia += sorted[sorted.length-1].kw * ((fin - ultimaObs) / (1000 * 60 * 60));
+      }
     }
     
-    const tiempo=ha-he;
-    const eqInfo=equipos.find(e=>e.id===equipo);
-    const potNom=eqInfo?.potencia||100;
-    const pKW=obs.reduce((s,o)=>s+o.kw,0)/obs.length;
-    const cargaProm=(pKW/potNom)*100;
+    const eqInfo = equipos.find(e => e.id === equipo);
+    const potNom = eqInfo?.potencia || 100;
+    const pKW = obs.reduce((s, o) => s + o.kw, 0) / obs.length;
+    const cargaProm = (pKW / potNom) * 100;
+    const clienteFinal = cliente === '__otro__' ? clienteManual : (clientes.find(c => c.id === cliente)?.nombre || cliente);
+    const operadorNombre = operadores.find(o => o.id === operador)?.nombre || operador;
     
     setRes({
-      id:'SVC-'+Date.now(),fecha:new Date().toISOString().split('T')[0],
-      equipo,cliente,hEnc,hApg,fp:parseFloat(fp),tiempo:tiempo.toFixed(2),
-      combI:ci,combF:cf,comb:combustible.toFixed(2),energ:energia.toFixed(2),
-      efic:(energia/combustible).toFixed(2),combH:(combustible/tiempo).toFixed(2),
-      pKW:pKW.toFixed(2),cargaProm:cargaProm.toFixed(1),
-      pDb:(obs.reduce((s,o)=>s+o.desb,0)/obs.length).toFixed(1),
-      obs:obs.map(o=>({hora:o.hora,voltaje:o.volt,l1:o.l1,l2:o.l2,l3:o.l3,ampProm:((o.l1+o.l2+o.l3)/3).toFixed(1),potencia:o.kw.toFixed(2),desbalance:o.desb.toFixed(1),carga:((o.kw/potNom)*100).toFixed(1)}))
+      id: null, // Se generará en el servidor
+      fechaEnc, horaEnc, fechaApg, horaApg,
+      equipo,
+      cliente: clienteFinal,
+      operador: operadorNombre,
+      fp: parseFloat(fp),
+      tiempo: horasTotales.toFixed(2),
+      combI: ci, combF: cf,
+      totalRecargas: totalRecargas,
+      comb: combustible.toFixed(2),
+      energ: energia.toFixed(2),
+      efic: (energia / combustible).toFixed(2),
+      combH: (combustible / horasTotales).toFixed(2),
+      pKW: pKW.toFixed(2),
+      cargaProm: cargaProm.toFixed(1),
+      pDb: (obs.reduce((s, o) => s + o.desb, 0) / obs.length).toFixed(1),
+      recargas: recargas,
+      obs: obs.map(o => ({
+        fecha: o.fecha,
+        hora: o.hora,
+        voltaje: o.volt,
+        l1: o.l1, l2: o.l2, l3: o.l3,
+        ampProm: ((o.l1 + o.l2 + o.l3) / 3).toFixed(1),
+        potencia: o.kw.toFixed(2),
+        desbalance: o.desb.toFixed(1),
+        carga: o.carga.toFixed(1)
+      }))
     });
   };
 
   const guardarLocal = () => {
-    if(!res)return;
-    const hist=JSON.parse(localStorage.getItem('gc_historial')||'[]');
-    hist.unshift({...res,sincronizado:false});
-    localStorage.setItem('gc_historial',JSON.stringify(hist));
+    if (!res) return;
+    const hist = JSON.parse(localStorage.getItem('gc_historial') || '[]');
+    hist.unshift({...res, id: 'LOCAL-' + Date.now(), sincronizado: false});
+    localStorage.setItem('gc_historial', JSON.stringify(hist));
     alert('✅ Guardado localmente');
     limpiar();
   };
 
   const guardarYEnviar = async () => {
-    if(!res)return;
-    if(!sheetsUrl){alert('Configure URL de Sheets');return;}
+    if (!res) return;
+    if (!sheetsUrl) { alert('Configure URL de Sheets en Configuración'); return; }
+    
     setEnviando(true);
     try {
-      const payload = {id:res.id,fecha:res.fecha,equipo:res.equipo,cliente:res.cliente,horaEnc:res.hEnc,horaApg:res.hApg,horas:parseFloat(res.tiempo),combInicial:res.combI,combFinal:res.combF,combConsumido:parseFloat(res.comb),energiaKwh:parseFloat(res.energ),eficiencia:parseFloat(res.efic),fp:res.fp,observaciones:res.obs};
-      await fetch(sheetsUrl,{method:'POST',mode:'no-cors',body:JSON.stringify(payload)});
-      const hist=JSON.parse(localStorage.getItem('gc_historial')||'[]');
-      hist.unshift({...res,sincronizado:true});
-      localStorage.setItem('gc_historial',JSON.stringify(hist));
-      alert('✅ Enviado a Sheets');
+      const payload = {
+        equipo: res.equipo,
+        cliente: res.cliente,
+        operador: res.operador,
+        fechaEnc: res.fechaEnc,
+        horaEnc: res.horaEnc,
+        fechaApg: res.fechaApg,
+        horaApg: res.horaApg,
+        horas: parseFloat(res.tiempo),
+        combInicial: res.combI,
+        combFinal: res.combF,
+        totalRecargas: res.totalRecargas,
+        combConsumido: parseFloat(res.comb),
+        energiaKwh: parseFloat(res.energ),
+        eficiencia: parseFloat(res.efic),
+        fp: res.fp,
+        recargas: res.recargas.map(r => ({
+          fecha: r.fecha,
+          hora: r.hora,
+          nivelAntes: r.nivelAntes,
+          nivelDespues: r.nivelDespues,
+          litrosAntes: r.litrosAntes,
+          litrosDespues: r.litrosDespues,
+          litrosAgregados: r.litrosAgregados
+        })),
+        observaciones: res.obs
+      };
+      
+      const response = await fetch(sheetsUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      
+      // Con no-cors no podemos leer la respuesta, asumimos éxito
+      const hist = JSON.parse(localStorage.getItem('gc_historial') || '[]');
+      hist.unshift({...res, id: 'SYNC-' + Date.now(), sincronizado: true});
+      localStorage.setItem('gc_historial', JSON.stringify(hist));
+      alert('✅ Enviado a Google Sheets');
       limpiar();
-    } catch(e) { alert('❌ Error. Guardado local.'); guardarLocal(); }
+    } catch (e) {
+      alert('❌ Error de conexión. Guardando localmente.');
+      guardarLocal();
+    }
     setEnviando(false);
   };
 
   const limpiar = () => {
-    setObs([]);setCombI('');setCombF('');setRes(null);setCliente('');setEquipo('');setHEnc('');setHApg('');
+    setObs([]); setRecargas([]);
+    setCombI(''); setCombF('');
+    setRes(null);
+    setCliente(''); setClienteManual('');
+    setOperador(''); setEquipo('');
+    setFechaEnc(HOY()); setHoraEnc('');
+    setFechaApg(''); setHoraApg('');
     localStorage.removeItem('gc_actual');
   };
 
+  const eqInfo = equipos.find(e => e.id === equipo);
+  const capacidad = eqInfo?.tanque || 0;
+
   return (
-    <div className="p-4 pb-6 space-y-4">
+    <div className="p-4 pb-8 space-y-4">
       {!res ? (<>
+        {/* Indicador de servicio en progreso */}
+        {obs.length > 0 && (
+          <div className="bg-amber-500/20 border border-amber-500/50 rounded-xl p-3">
+            <p className="text-amber-400 text-sm font-medium">⏳ Servicio en progreso</p>
+            <p className="text-slate-400 text-xs">{obs.length} observaciones guardadas • Última: {obs[obs.length-1]?.fecha} {obs[obs.length-1]?.hora}</p>
+          </div>
+        )}
+
+        {/* Datos del servicio */}
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-white font-semibold text-sm">📋 Servicio</h2>
+            <h2 className="text-white font-semibold text-sm">📋 Datos del Servicio</h2>
             <span className="text-slate-500 text-xs">FP: {fp}</span>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <input type="text" value={cliente} onChange={e=>setCliente(e.target.value)} placeholder="Cliente" className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm placeholder-slate-400"/>
-            <select value={equipo} onChange={e=>setEquipo(e.target.value)} className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm">
-              <option value="">Equipo...</option>
-              {equipos.map(eq=><option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <div><label className="text-emerald-400 text-xs">🟢 Encendido</label><input type="time" value={hEnc} onChange={e=>setHEnc(e.target.value)} className="w-full bg-slate-700 border border-emerald-600/50 rounded-xl px-3 py-3 text-white text-sm"/></div>
-            <div><label className="text-red-400 text-xs">🔴 Apagado</label><input type="time" value={hApg} onChange={e=>setHApg(e.target.value)} className="w-full bg-slate-700 border border-red-600/50 rounded-xl px-3 py-3 text-white text-sm"/></div>
+          
+          <div className="space-y-3">
+            {/* Equipo */}
+            <div>
+              <label className="text-slate-400 text-xs">Equipo *</label>
+              <select value={equipo} onChange={e => setEquipo(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm">
+                <option value="">Seleccionar equipo...</option>
+                {equipos.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre} ({eq.potencia}kW)</option>)}
+              </select>
+            </div>
+            
+            {/* Operador */}
+            <div>
+              <label className="text-slate-400 text-xs">Operador *</label>
+              <select value={operador} onChange={e => setOperador(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm">
+                <option value="">Seleccionar operador...</option>
+                {operadores.map(op => <option key={op.id} value={op.id}>{op.nombre}</option>)}
+              </select>
+            </div>
+            
+            {/* Cliente */}
+            <div>
+              <label className="text-slate-400 text-xs">Cliente</label>
+              <select value={cliente} onChange={e => {setCliente(e.target.value); if(e.target.value !== '__otro__') setClienteManual('');}} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm">
+                <option value="">Seleccionar cliente...</option>
+                {clientes.map(cl => <option key={cl.id} value={cl.id}>{cl.nombre}</option>)}
+                <option value="__otro__">✏️ Otro (escribir)</option>
+              </select>
+              {cliente === '__otro__' && (
+                <input type="text" value={clienteManual} onChange={e => setClienteManual(e.target.value)} placeholder="Nombre del cliente" className="w-full mt-2 bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/>
+              )}
+            </div>
+            
+            {/* Fechas y horas */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-emerald-400 text-xs">🟢 Fecha Encendido</label>
+                <input type="date" value={fechaEnc} onChange={e => setFechaEnc(e.target.value)} className="w-full bg-slate-700 border border-emerald-600/50 rounded-xl px-3 py-3 text-white text-sm"/>
+              </div>
+              <div>
+                <label className="text-emerald-400 text-xs">Hora Encendido</label>
+                <input type="time" value={horaEnc} onChange={e => setHoraEnc(e.target.value)} className="w-full bg-slate-700 border border-emerald-600/50 rounded-xl px-3 py-3 text-white text-sm"/>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-red-400 text-xs">🔴 Fecha Apagado</label>
+                <input type="date" value={fechaApg} onChange={e => setFechaApg(e.target.value)} className="w-full bg-slate-700 border border-red-600/50 rounded-xl px-3 py-3 text-white text-sm"/>
+              </div>
+              <div>
+                <label className="text-red-400 text-xs">Hora Apagado</label>
+                <input type="time" value={horaApg} onChange={e => setHoraApg(e.target.value)} className="w-full bg-slate-700 border border-red-600/50 rounded-xl px-3 py-3 text-white text-sm"/>
+              </div>
+            </div>
           </div>
         </div>
 
+        {/* Nueva lectura */}
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
           <h2 className="text-white font-semibold mb-3 text-sm">➕ Nueva Lectura</h2>
           <div className="grid grid-cols-2 gap-3 mb-3">
-            <div><label className="text-slate-400 text-xs">Hora</label><input type="time" value={hora} onChange={e=>setHora(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
-            <div><label className="text-cyan-400 text-xs">Voltaje</label><input type="number" value={volt} onChange={e=>setVolt(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
+            <div>
+              <label className="text-slate-400 text-xs">Fecha</label>
+              <input type="date" value={fechaObs} onChange={e => setFechaObs(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/>
+            </div>
+            <div>
+              <label className="text-slate-400 text-xs">Hora</label>
+              <input type="time" value={hora} onChange={e => setHora(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            <div><label className="text-red-400 text-xs">L1</label><input type="number" value={l1} onChange={e=>setL1(e.target.value)} placeholder="A" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
-            <div><label className="text-yellow-400 text-xs">L2</label><input type="number" value={l2} onChange={e=>setL2(e.target.value)} placeholder="A" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
-            <div><label className="text-blue-400 text-xs">L3</label><input type="number" value={l3} onChange={e=>setL3(e.target.value)} placeholder="A" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-3 text-white text-sm"/></div>
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            <div>
+              <label className="text-cyan-400 text-xs">Voltaje</label>
+              <input type="number" value={volt} onChange={e => setVolt(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-xl px-2 py-3 text-white text-sm text-center"/>
+            </div>
+            <div>
+              <label className="text-red-400 text-xs">L1 (A)</label>
+              <input type="number" value={l1} onChange={e => setL1(e.target.value)} placeholder="A" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-2 py-3 text-white text-sm text-center"/>
+            </div>
+            <div>
+              <label className="text-yellow-400 text-xs">L2 (A)</label>
+              <input type="number" value={l2} onChange={e => setL2(e.target.value)} placeholder="A" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-2 py-3 text-white text-sm text-center"/>
+            </div>
+            <div>
+              <label className="text-blue-400 text-xs">L3 (A)</label>
+              <input type="number" value={l3} onChange={e => setL3(e.target.value)} placeholder="A" className="w-full bg-slate-700 border border-slate-600 rounded-xl px-2 py-3 text-white text-sm text-center"/>
+            </div>
           </div>
-          <button onClick={agregar} className="w-full bg-blue-600 active:bg-blue-800 text-white font-semibold py-3 rounded-xl">Agregar</button>
+          <button onClick={agregarObs} className="w-full bg-blue-600 active:bg-blue-800 text-white font-semibold py-3 rounded-xl">Agregar Lectura</button>
         </div>
 
-        {obs.length>0&&(
+        {/* Lista de observaciones */}
+        {obs.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
             <h2 className="text-white font-semibold mb-3 text-sm">📊 Lecturas ({obs.length})</h2>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {obs.map(o=>(
+            <div className="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
+              {obs.map(o => (
                 <div key={o.id} className={`rounded-lg p-2 border ${getDbBg(o.desb)}`}>
                   <div className="flex justify-between text-sm">
+                    <span className="text-slate-400 text-xs">{o.fecha}</span>
                     <span className="text-amber-400 font-mono">{o.hora}</span>
                     <span className="text-cyan-400">{o.volt}V</span>
                     <span className="text-emerald-400">{o.kw.toFixed(1)}kW</span>
                     <span className={getDbCol(o.desb)}>{o.desb.toFixed(1)}%</span>
-                    <button onClick={()=>setObs(obs.filter(x=>x.id!==o.id))} className="text-red-400">×</button>
+                    <button onClick={() => setObs(obs.filter(x => x.id !== o.id))} className="text-red-400">×</button>
                   </div>
                 </div>
               ))}
@@ -320,77 +676,167 @@ function Registro({sheetsUrl}) {
           </div>
         )}
 
-        <CombustibleSelector equipo={equipo} equipos={equipos} combI={combI} setCombI={setCombI} combF={combF} setCombF={setCombF} />
+        {/* Combustible */}
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-white font-semibold text-sm">⛽ Combustible</h2>
+            {capacidad > 0 && <span className="text-slate-400 text-xs">Tanque: {capacidad}L</span>}
+          </div>
+          
+          <div className="space-y-4">
+            <CombustibleSelector equipo={equipo} equipos={equipos} valor={combI} setValor={setCombI} tipo="inicial" label="🟢 Nivel Inicial"/>
+            <CombustibleSelector equipo={equipo} equipos={equipos} valor={combF} setValor={setCombF} tipo="final" label="🔴 Nivel Final"/>
+            
+            {combI && combF && (
+              <div className="bg-slate-700/50 rounded-lg p-3">
+                <div className="h-3 bg-slate-700 rounded-full overflow-hidden flex mb-2">
+                  <div className="h-full bg-amber-500" style={{width: `${(parseFloat(combF)/capacidad)*100}%`}} />
+                  <div className="h-full bg-amber-500/30" style={{width: `${((parseFloat(combI)-parseFloat(combF))/capacidad)*100}%`}} />
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 text-sm">Consumo directo:</span>
+                  <span className="text-amber-400 font-bold">{(parseFloat(combI) - parseFloat(combF)).toFixed(1)} L</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
+        {/* Recargas */}
+        <RecargasSection equipo={equipo} equipos={equipos} recargas={recargas} setRecargas={setRecargas}/>
+
+        {/* Botones de acción */}
         <div className="flex gap-2">
           <button onClick={limpiar} className="flex-1 bg-slate-700 text-slate-300 py-3 rounded-xl">🗑️ Limpiar</button>
           <button onClick={calcular} className="flex-[2] bg-amber-500 text-slate-900 font-bold py-3 rounded-xl">📊 Calcular</button>
         </div>
       </>) : (<>
+        {/* Resultados */}
         <div className="bg-slate-800 rounded-xl p-4 border border-emerald-600">
           <h2 className="text-emerald-400 font-semibold mb-3">✅ Resultados</h2>
           <div className="grid grid-cols-2 gap-3 text-center">
-            <div className="bg-slate-700/50 rounded-lg p-3"><p className="text-slate-400 text-xs">Combustible</p><p className="text-2xl font-bold text-amber-400">{res.comb} L</p></div>
-            <div className="bg-slate-700/50 rounded-lg p-3"><p className="text-slate-400 text-xs">Tiempo</p><p className="text-2xl font-bold text-blue-400">{res.tiempo} h</p></div>
-            <div className="bg-slate-700/50 rounded-lg p-3"><p className="text-slate-400 text-xs">Energía</p><p className="text-2xl font-bold text-emerald-400">{res.energ} kWh</p></div>
-            <div className="bg-slate-700/50 rounded-lg p-3"><p className="text-slate-400 text-xs">Consumo/h</p><p className="text-2xl font-bold text-purple-400">{res.combH} L/h</p></div>
-            <div className="bg-slate-700/50 rounded-lg p-3 col-span-2"><p className="text-slate-400 text-xs">Eficiencia</p><p className="text-3xl font-bold text-cyan-400">{res.efic} kWh/L</p></div>
+            <div className="bg-slate-700/50 rounded-lg p-3">
+              <p className="text-slate-400 text-xs">Combustible</p>
+              <p className="text-2xl font-bold text-amber-400">{res.comb} L</p>
+              {res.totalRecargas > 0 && <p className="text-xs text-slate-500">(+{res.totalRecargas.toFixed(1)}L recargados)</p>}
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-3">
+              <p className="text-slate-400 text-xs">Tiempo</p>
+              <p className="text-2xl font-bold text-blue-400">{res.tiempo} h</p>
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-3">
+              <p className="text-slate-400 text-xs">Energía</p>
+              <p className="text-2xl font-bold text-emerald-400">{res.energ} kWh</p>
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-3">
+              <p className="text-slate-400 text-xs">Consumo/h</p>
+              <p className="text-2xl font-bold text-purple-400">{res.combH} L/h</p>
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-3 col-span-2">
+              <p className="text-slate-400 text-xs">Eficiencia</p>
+              <p className="text-3xl font-bold text-cyan-400">{res.efic} kWh/L</p>
+            </div>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-700 text-sm text-center">
             <span className="text-slate-400">Carga: </span><span className="text-purple-400 font-bold">{res.cargaProm}%</span>
             <span className="text-slate-400 ml-4">Desbalance: </span><span className={getDbCol(parseFloat(res.pDb))}>{res.pDb}%</span>
           </div>
+          <div className="mt-2 pt-2 border-t border-slate-700 text-xs text-slate-500 text-center">
+            {res.equipo} • {res.operador} • {res.cliente}
+          </div>
         </div>
+        
+        {/* Botones de guardar */}
         <div className="space-y-2">
           <button onClick={guardarYEnviar} disabled={enviando} className="w-full bg-emerald-600 disabled:opacity-50 text-white font-bold py-4 rounded-xl">
-            {enviando ? '⏳ Enviando...' : '☁️ Guardar y Enviar'}
+            {enviando ? '⏳ Enviando...' : '☁️ Guardar y Enviar a Sheets'}
           </button>
-          <button onClick={guardarLocal} className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl">💾 Solo Local</button>
-          <button onClick={()=>setRes(null)} className="w-full bg-slate-700 text-slate-300 py-3 rounded-xl">← Editar</button>
+          <button onClick={guardarLocal} className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl">💾 Solo Guardar Local</button>
+          <button onClick={() => setRes(null)} className="w-full bg-slate-700 text-slate-300 py-3 rounded-xl">← Editar Datos</button>
         </div>
       </>)}
     </div>
   );
 }
 
+// ============================================
+// HISTORIAL
+// ============================================
 function Historial({sheetsUrl}) {
   const [hist, setHist] = useState([]);
   const [enviando, setEnviando] = useState(null);
 
-  useEffect(() => { setHist(JSON.parse(localStorage.getItem('gc_historial')||'[]')); }, []);
+  useEffect(() => {
+    setHist(JSON.parse(localStorage.getItem('gc_historial') || '[]'));
+  }, []);
 
   const sincronizar = async (item, idx) => {
-    if(!sheetsUrl){alert('Configure URL de Sheets');return;}
+    if (!sheetsUrl) { alert('Configure URL de Sheets'); return; }
     setEnviando(idx);
     try {
-      const payload = {id:item.id,fecha:item.fecha,equipo:item.equipo,cliente:item.cliente,horaEnc:item.hEnc,horaApg:item.hApg,horas:parseFloat(item.tiempo),combInicial:item.combI,combFinal:item.combF,combConsumido:parseFloat(item.comb),energiaKwh:parseFloat(item.energ),eficiencia:parseFloat(item.efic),fp:item.fp,observaciones:item.obs};
-      await fetch(sheetsUrl,{method:'POST',mode:'no-cors',body:JSON.stringify(payload)});
-      const newHist = [...hist]; newHist[idx].sincronizado = true; setHist(newHist);
-      localStorage.setItem('gc_historial',JSON.stringify(newHist));
+      const payload = {
+        equipo: item.equipo,
+        cliente: item.cliente,
+        operador: item.operador,
+        fechaEnc: item.fechaEnc,
+        horaEnc: item.horaEnc,
+        fechaApg: item.fechaApg,
+        horaApg: item.horaApg,
+        horas: parseFloat(item.tiempo),
+        combInicial: item.combI,
+        combFinal: item.combF,
+        totalRecargas: item.totalRecargas || 0,
+        combConsumido: parseFloat(item.comb),
+        energiaKwh: parseFloat(item.energ),
+        eficiencia: parseFloat(item.efic),
+        fp: item.fp,
+        recargas: item.recargas || [],
+        observaciones: item.obs
+      };
+      
+      await fetch(sheetsUrl, {method: 'POST', mode: 'no-cors', body: JSON.stringify(payload)});
+      const newHist = [...hist];
+      newHist[idx].sincronizado = true;
+      setHist(newHist);
+      localStorage.setItem('gc_historial', JSON.stringify(newHist));
       alert('✅ Sincronizado');
-    } catch(e) { alert('❌ Error'); }
+    } catch (e) {
+      alert('❌ Error de sincronización');
+    }
     setEnviando(null);
   };
 
   const eliminar = (idx) => {
-    if(!confirm('¿Eliminar?'))return;
-    const newHist = hist.filter((_,i)=>i!==idx); setHist(newHist);
-    localStorage.setItem('gc_historial',JSON.stringify(newHist));
+    if (!confirm('¿Eliminar este registro?')) return;
+    const newHist = hist.filter((_, i) => i !== idx);
+    setHist(newHist);
+    localStorage.setItem('gc_historial', JSON.stringify(newHist));
   };
+
+  const pendientes = hist.filter(h => !h.sincronizado).length;
 
   return (
     <div className="p-4 space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-white font-semibold">📋 Historial</h2>
-        {hist.filter(h=>!h.sincronizado).length > 0 && <span className="bg-amber-500 text-slate-900 text-xs px-2 py-1 rounded-full">{hist.filter(h=>!h.sincronizado).length} pend.</span>}
+        {pendientes > 0 && <span className="bg-amber-500 text-slate-900 text-xs px-2 py-1 rounded-full font-medium">{pendientes} pendientes</span>}
       </div>
-      {hist.length === 0 ? <p className="text-slate-500 text-center py-8">Sin registros</p> : (
+      
+      {hist.length === 0 ? (
+        <p className="text-slate-500 text-center py-8">Sin registros</p>
+      ) : (
         <div className="space-y-3">
           {hist.map((h, idx) => (
-            <div key={h.id} className={`bg-slate-800 rounded-xl p-4 border ${h.sincronizado?'border-emerald-600/50':'border-amber-600/50'}`}>
+            <div key={h.id || idx} className={`bg-slate-800 rounded-xl p-4 border ${h.sincronizado ? 'border-emerald-600/50' : 'border-amber-600/50'}`}>
               <div className="flex justify-between items-start mb-2">
-                <div><p className="text-white font-medium">{h.cliente || '-'}</p><p className="text-slate-400 text-xs">{h.equipo} • {h.fecha}</p></div>
-                <span className={`text-xs px-2 py-1 rounded ${h.sincronizado?'bg-emerald-500/20 text-emerald-400':'bg-amber-500/20 text-amber-400'}`}>{h.sincronizado ? '✓' : '⏳'}</span>
+                <div>
+                  <p className="text-white font-medium">{h.cliente || '-'}</p>
+                  <p className="text-slate-400 text-xs">{h.equipo} • {h.operador}</p>
+                  <p className="text-slate-500 text-xs">{h.fechaEnc} {h.horaEnc} → {h.fechaApg} {h.horaApg}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded ${h.sincronizado ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                  {h.sincronizado ? '✓ Sync' : '⏳ Pend'}
+                </span>
               </div>
               <div className="grid grid-cols-4 gap-2 text-center text-sm mb-3">
                 <div><p className="text-slate-500 text-xs">Tiempo</p><p className="text-blue-400">{h.tiempo}h</p></div>
@@ -399,8 +845,12 @@ function Historial({sheetsUrl}) {
                 <div><p className="text-slate-500 text-xs">Efic.</p><p className="text-cyan-400">{h.efic}</p></div>
               </div>
               <div className="flex gap-2">
-                {!h.sincronizado && <button onClick={()=>sincronizar(h,idx)} disabled={enviando===idx} className="flex-1 bg-emerald-600 text-white text-sm py-2 rounded-lg">{enviando===idx ? '⏳' : '☁️ Sync'}</button>}
-                <button onClick={()=>eliminar(idx)} className="bg-red-600/20 text-red-400 text-sm py-2 px-3 rounded-lg">🗑️</button>
+                {!h.sincronizado && (
+                  <button onClick={() => sincronizar(h, idx)} disabled={enviando === idx} className="flex-1 bg-emerald-600 text-white text-sm py-2 rounded-lg">
+                    {enviando === idx ? '⏳...' : '☁️ Sincronizar'}
+                  </button>
+                )}
+                <button onClick={() => eliminar(idx)} className="bg-red-600/20 text-red-400 text-sm py-2 px-3 rounded-lg">🗑️</button>
               </div>
             </div>
           ))}
@@ -410,14 +860,17 @@ function Historial({sheetsUrl}) {
   );
 }
 
+// ============================================
+// ESTADÍSTICAS
+// ============================================
 function Estadisticas() {
   const [hist, setHist] = useState([]);
   const [equipos, setEquipos] = useState([]);
   const [selEq, setSelEq] = useState('todos');
 
   useEffect(() => {
-    setHist(JSON.parse(localStorage.getItem('gc_historial')||'[]'));
-    setEquipos(JSON.parse(localStorage.getItem('gc_equipos')||'[]'));
+    setHist(JSON.parse(localStorage.getItem('gc_historial') || '[]'));
+    setEquipos(JSON.parse(localStorage.getItem('gc_equipos') || '[]'));
   }, []);
 
   const filtrado = selEq === 'todos' ? hist : hist.filter(h => h.equipo === selEq);
@@ -429,20 +882,23 @@ function Estadisticas() {
       const tiempoPorObs = parseFloat(servicio.tiempo) / servicio.obs.length;
       servicio.obs.forEach(ob => {
         const promAmp = (parseFloat(ob.l1) + parseFloat(ob.l2) + parseFloat(ob.l3)) / 3;
-        todasObs.push({...ob,promAmp,combAsignado: combPorObs,tiempoAsignado: tiempoPorObs});
+        todasObs.push({...ob, promAmp, combAsignado: combPorObs, tiempoAsignado: tiempoPorObs});
       });
     }
   });
 
   const rangos = [];
-  for (let i = 0; i < 200; i += 10) rangos.push({ min: i, max: i + 10, label: `${i}-${i+10}A`, obs: [] });
-  todasObs.forEach(ob => { const rango = rangos.find(r => ob.promAmp >= r.min && ob.promAmp < r.max); if (rango) rango.obs.push(ob); });
+  for (let i = 0; i < 200; i += 10) rangos.push({min: i, max: i + 10, label: `${i}-${i+10}A`, obs: []});
+  todasObs.forEach(ob => {
+    const rango = rangos.find(r => ob.promAmp >= r.min && ob.promAmp < r.max);
+    if (rango) rango.obs.push(ob);
+  });
 
   const rangosConDatos = rangos.map(r => {
-    if (r.obs.length === 0) return { ...r, consumo: 0, muestras: 0 };
+    if (r.obs.length === 0) return {...r, consumo: 0, muestras: 0};
     const totalComb = r.obs.reduce((s, o) => s + o.combAsignado, 0);
     const totalTiempo = r.obs.reduce((s, o) => s + o.tiempoAsignado, 0);
-    return { ...r, consumo: totalComb / totalTiempo, muestras: r.obs.length };
+    return {...r, consumo: totalComb / totalTiempo, muestras: r.obs.length};
   });
 
   const maxConsumo = Math.max(...rangosConDatos.map(r => r.consumo), 1);
@@ -453,39 +909,54 @@ function Estadisticas() {
   return (
     <div className="p-4 space-y-4">
       <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-        <label className="text-slate-400 text-sm">Equipo:</label>
-        <select value={selEq} onChange={e=>setSelEq(e.target.value)} className="w-full mt-2 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white">
-          <option value="todos">Todos</option>
-          {equipos.map(eq=><option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
+        <label className="text-slate-400 text-sm">Filtrar por Equipo:</label>
+        <select value={selEq} onChange={e => setSelEq(e.target.value)} className="w-full mt-2 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white">
+          <option value="todos">Todos los equipos</option>
+          {equipos.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
         </select>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center"><p className="text-slate-400 text-xs">Servicios</p><p className="text-3xl font-bold text-white">{filtrado.length}</p></div>
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center"><p className="text-slate-400 text-xs">Observaciones</p><p className="text-3xl font-bold text-purple-400">{todasObs.length}</p></div>
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center"><p className="text-slate-400 text-xs">Horas</p><p className="text-3xl font-bold text-blue-400">{totalHoras.toFixed(1)}</p></div>
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center"><p className="text-slate-400 text-xs">Combustible</p><p className="text-3xl font-bold text-amber-400">{totalComb.toFixed(0)}L</p></div>
-        <div className="bg-slate-800 rounded-xl p-4 border border-cyan-600 text-center col-span-2"><p className="text-slate-400 text-xs">Consumo Promedio</p><p className="text-4xl font-bold text-cyan-400">{promCombH.toFixed(2)} L/h</p></div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+          <p className="text-slate-400 text-xs">Servicios</p>
+          <p className="text-3xl font-bold text-white">{filtrado.length}</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+          <p className="text-slate-400 text-xs">Observaciones</p>
+          <p className="text-3xl font-bold text-purple-400">{todasObs.length}</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+          <p className="text-slate-400 text-xs">Horas Totales</p>
+          <p className="text-3xl font-bold text-blue-400">{totalHoras.toFixed(1)}</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+          <p className="text-slate-400 text-xs">Combustible</p>
+          <p className="text-3xl font-bold text-amber-400">{totalComb.toFixed(0)}L</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-cyan-600 text-center col-span-2">
+          <p className="text-slate-400 text-xs">Consumo Promedio</p>
+          <p className="text-4xl font-bold text-cyan-400">{promCombH.toFixed(2)} L/h</p>
+        </div>
       </div>
 
       <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
         <h3 className="text-white font-semibold mb-1">📊 Consumo por Amperaje</h3>
         <p className="text-slate-500 text-xs mb-4">Promedio de 3 fases • Rangos de 10A</p>
-        {rangosConDatos.filter(r=>r.muestras>0).length === 0 ? (
-          <p className="text-slate-500 text-center py-4">Sin datos</p>
+        {rangosConDatos.filter(r => r.muestras > 0).length === 0 ? (
+          <p className="text-slate-500 text-center py-4">Sin datos suficientes</p>
         ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar pr-1">
             {rangosConDatos.map((r, i) => r.muestras > 0 && (
               <div key={i}>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-slate-300 font-mono">{r.label}</span>
                   <div className="flex gap-3">
-                    <span className="text-slate-500 text-xs">{r.muestras}</span>
+                    <span className="text-slate-500 text-xs">{r.muestras} obs</span>
                     <span className="text-amber-400 font-medium">{r.consumo.toFixed(2)} L/h</span>
                   </div>
                 </div>
                 <div className="h-4 bg-slate-700 rounded overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded" style={{width: `${(r.consumo / maxConsumo) * 100}%`}} />
+                  <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded transition-all" style={{width: `${(r.consumo / maxConsumo) * 100}%`}} />
                 </div>
               </div>
             ))}
@@ -496,69 +967,156 @@ function Estadisticas() {
   );
 }
 
+// ============================================
+// CONFIGURACIÓN
+// ============================================
 function Config({sheetsUrl, setSheetsUrl}) {
   const [url, setUrl] = useState(sheetsUrl);
   const [fpGlobal, setFpGlobal] = useState(() => localStorage.getItem('gc_fp') || '0.8');
   const [equipos, setEquipos] = useState([]);
-  const [nuevoEq, setNuevoEq] = useState({id:'',nombre:'',potencia:'',tanque:''});
+  const [operadores, setOperadores] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [cargando, setCargando] = useState(false);
 
-  useEffect(() => { setEquipos(JSON.parse(localStorage.getItem('gc_equipos')||'[]')); }, []);
+  useEffect(() => {
+    setEquipos(JSON.parse(localStorage.getItem('gc_equipos') || '[]'));
+    setOperadores(JSON.parse(localStorage.getItem('gc_operadores') || '[]'));
+    setClientes(JSON.parse(localStorage.getItem('gc_clientes') || '[]'));
+  }, []);
 
-  const guardarUrl = () => { localStorage.setItem(SHEETS_URL_KEY, url); setSheetsUrl(url); alert('✅ URL guardada'); };
-  const guardarFp = () => { localStorage.setItem('gc_fp', fpGlobal); alert('✅ FP guardado'); };
-
-  const agregarEquipo = () => {
-    if(!nuevoEq.id||!nuevoEq.nombre||!nuevoEq.potencia||!nuevoEq.tanque){alert('Complete todo');return;}
-    const nuevo = [...equipos, {id:nuevoEq.id,nombre:nuevoEq.nombre,potencia:parseFloat(nuevoEq.potencia),tanque:parseFloat(nuevoEq.tanque)}];
-    setEquipos(nuevo); localStorage.setItem('gc_equipos',JSON.stringify(nuevo));
-    setNuevoEq({id:'',nombre:'',potencia:'',tanque:''});
+  const guardarUrl = () => {
+    localStorage.setItem(SHEETS_URL_KEY, url);
+    setSheetsUrl(url);
+    alert('✅ URL guardada');
   };
 
-  const eliminarEquipo = (id) => { const nuevo = equipos.filter(e=>e.id!==id); setEquipos(nuevo); localStorage.setItem('gc_equipos',JSON.stringify(nuevo)); };
+  const guardarFp = () => {
+    localStorage.setItem('gc_fp', fpGlobal);
+    alert('✅ Factor de Potencia guardado');
+  };
+
+  const cargarDatos = async () => {
+    if (!url) { alert('Primero guarde la URL de Sheets'); return; }
+    setCargando(true);
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.success) {
+        if (data.equipos) {
+          setEquipos(data.equipos);
+          localStorage.setItem('gc_equipos', JSON.stringify(data.equipos));
+        }
+        if (data.operadores) {
+          setOperadores(data.operadores);
+          localStorage.setItem('gc_operadores', JSON.stringify(data.operadores));
+        }
+        if (data.clientes) {
+          setClientes(data.clientes);
+          localStorage.setItem('gc_clientes', JSON.stringify(data.clientes));
+        }
+        alert(`✅ Datos cargados:\n${data.equipos?.length || 0} equipos\n${data.operadores?.length || 0} operadores\n${data.clientes?.length || 0} clientes`);
+      } else {
+        alert('❌ Error: ' + (data.error || 'Respuesta inválida'));
+      }
+    } catch (e) {
+      alert('❌ Error de conexión: ' + e.message);
+    }
+    setCargando(false);
+  };
+
+  const limpiarHistorial = () => {
+    if (confirm('¿Eliminar TODO el historial local?')) {
+      localStorage.removeItem('gc_historial');
+      alert('✅ Historial eliminado');
+    }
+  };
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 pb-8 space-y-4">
+      {/* URL de Sheets */}
       <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
         <h2 className="text-white font-semibold mb-3">🔗 Google Sheets</h2>
-        <input type="url" value={url} onChange={e=>setUrl(e.target.value)} placeholder="URL del Script..." className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"/>
-        <button onClick={guardarUrl} className="w-full mt-3 bg-emerald-600 text-white py-2 rounded-lg">💾 Guardar URL</button>
+        <input type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="URL del Web App de Apps Script..." className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"/>
+        <div className="flex gap-2 mt-3">
+          <button onClick={guardarUrl} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm">💾 Guardar URL</button>
+          <button onClick={cargarDatos} disabled={cargando} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm">
+            {cargando ? '⏳...' : '🔄 Cargar Datos'}
+          </button>
+        </div>
       </div>
 
+      {/* Factor de Potencia */}
       <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
         <h2 className="text-white font-semibold mb-3">⚡ Factor de Potencia</h2>
         <div className="flex gap-2">
-          <input type="number" step="0.05" value={fpGlobal} onChange={e=>setFpGlobal(e.target.value)} className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-lg font-bold text-center"/>
+          <input type="number" step="0.05" min="0.5" max="1" value={fpGlobal} onChange={e => setFpGlobal(e.target.value)} className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-lg font-bold text-center"/>
           <button onClick={guardarFp} className="bg-emerald-600 text-white px-4 py-2 rounded-lg">💾</button>
         </div>
       </div>
 
+      {/* Equipos */}
       <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-        <h2 className="text-white font-semibold mb-3">🔧 Equipos</h2>
-        <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
-          {equipos.length===0 ? <p className="text-slate-500 text-sm">Sin equipos</p> : 
+        <h2 className="text-white font-semibold mb-3">🔧 Equipos ({equipos.length})</h2>
+        <div className="space-y-2 max-h-40 overflow-y-auto no-scrollbar">
+          {equipos.length === 0 ? (
+            <p className="text-slate-500 text-sm text-center py-2">Sin equipos. Presione "Cargar Datos"</p>
+          ) : (
             equipos.map(eq => (
-              <div key={eq.id} className="flex justify-between items-center bg-slate-700/50 rounded-lg p-2">
-                <div><p className="text-white text-sm">{eq.nombre}</p><p className="text-slate-400 text-xs">{eq.id} • {eq.potencia}kW • {eq.tanque}L</p></div>
-                <button onClick={()=>eliminarEquipo(eq.id)} className="text-red-400">×</button>
+              <div key={eq.id} className="bg-slate-700/50 rounded-lg p-2">
+                <p className="text-white font-medium text-sm">{eq.nombre}</p>
+                <p className="text-slate-400 text-xs">{eq.id} • {eq.potencia}kW • Tanque: {eq.tanque}L</p>
               </div>
             ))
-          }
+          )}
         </div>
-        <div className="border-t border-slate-700 pt-3">
-          <p className="text-slate-400 text-xs mb-2">Agregar:</p>
-          <div className="grid grid-cols-2 gap-2 mb-2">
-            <input type="text" value={nuevoEq.id} onChange={e=>setNuevoEq({...nuevoEq,id:e.target.value})} placeholder="ID" className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
-            <input type="text" value={nuevoEq.nombre} onChange={e=>setNuevoEq({...nuevoEq,nombre:e.target.value})} placeholder="Nombre" className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
-            <input type="number" value={nuevoEq.potencia} onChange={e=>setNuevoEq({...nuevoEq,potencia:e.target.value})} placeholder="kW" className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
-            <input type="number" value={nuevoEq.tanque} onChange={e=>setNuevoEq({...nuevoEq,tanque:e.target.value})} placeholder="Tanque (L)" className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"/>
-          </div>
-          <button onClick={agregarEquipo} className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm">+ Agregar</button>
+      </div>
+
+      {/* Operadores */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h2 className="text-white font-semibold mb-3">👷 Operadores ({operadores.length})</h2>
+        <div className="space-y-1 max-h-32 overflow-y-auto no-scrollbar">
+          {operadores.length === 0 ? (
+            <p className="text-slate-500 text-sm text-center py-2">Sin operadores</p>
+          ) : (
+            operadores.map(op => (
+              <div key={op.id} className="bg-slate-700/50 rounded-lg p-2">
+                <p className="text-white text-sm">{op.nombre}</p>
+              </div>
+            ))
+          )}
         </div>
+      </div>
+
+      {/* Clientes */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h2 className="text-white font-semibold mb-3">🏢 Clientes ({clientes.length})</h2>
+        <div className="space-y-1 max-h-32 overflow-y-auto no-scrollbar">
+          {clientes.length === 0 ? (
+            <p className="text-slate-500 text-sm text-center py-2">Sin clientes</p>
+          ) : (
+            clientes.map(cl => (
+              <div key={cl.id} className="bg-slate-700/50 rounded-lg p-2">
+                <p className="text-white text-sm">{cl.nombre}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Limpiar datos */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-red-900/50">
+        <h2 className="text-red-400 font-semibold mb-3">⚠️ Zona de Peligro</h2>
+        <button onClick={limpiarHistorial} className="w-full bg-red-600/20 text-red-400 py-2 rounded-lg text-sm border border-red-600/50">
+          🗑️ Eliminar Todo el Historial Local
+        </button>
       </div>
     </div>
   );
 }
 
+// ============================================
+// RENDER
+// ============================================
 ReactDOM.render(<App/>, document.getElementById('root'));
 </script>
 </body>
