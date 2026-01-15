@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#10b981">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ContaGen">
+  <title>ContaGen Mobile</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%2310b981' width='100' height='100' rx='15'/%3E%3Ctext x='50' y='68' font-size='50' text-anchor='middle' fill='%23fff'%3E$%3C/text%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%2310b981' width='100' height='100' rx='15'/%3E%3Ctext x='50' y='68' font-size='50' text-anchor='middle' fill='%23fff'%3E$%3C/text%3E%3C/svg%3E">
+  <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22ContaGen%22%2C%22short_name%22%3A%22ContaGen%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f172a%22%2C%22theme_color%22%3A%22%2310b981%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%25200%2520100%2520100%27%253E%253Crect%2520fill%3D%27%252310b981%27%2520width%3D%27100%27%2520height%3D%27100%27%2520rx%3D%2715%27%2F%253E%253Ctext%2520x%3D%2750%27%2520y%3D%2768%27%2520font-size%3D%2750%27%2520text-anchor%3D%27middle%27%2520fill%3D%27%2523fff%27%253E%2524%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; }
+    input, select { font-size: 16px !important; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    @keyframes pulse-green { 0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } }
+    .pulse-green { animation: pulse-green 2s infinite; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState, useEffect, useMemo} = React;
+
+// ============================================
+// CONSTANTES
+// ============================================
+const SHEETS_URL_KEY = 'contagen_sheets_url';
+const HOY = () => new Date().toISOString().split('T')[0];
+const AHORA = () => new Date().toTimeString().slice(0,5);
+
+const TIPOS_POLIZA = [
+  {codigo: 'I', nombre: 'Ingreso', color: 'emerald', icon: '💰'},
+  {codigo: 'E', nombre: 'Egreso', color: 'red', icon: '💸'},
+  {codigo: 'D', nombre: 'Diario', color: 'blue', icon: '📝'},
+];
+
+const PLANTILLAS = [
+  {
+    id: 'cobro_cliente',
+    nombre: 'Cobro a Cliente',
+    tipo: 'I',
+    icon: '💵',
+    color: 'emerald',
+    partidas: [
+      {cuenta_patron: '1102', tipo: 'debe', concepto: 'Depósito bancario'},
+      {cuenta_patron: '1110', tipo: 'haber', concepto: 'Cobro factura'},
+    ]
+  },
+  {
+    id: 'pago_proveedor',
+    nombre: 'Pago a Proveedor',
+    tipo: 'E',
+    icon: '🧾',
+    color: 'red',
+    partidas: [
+      {cuenta_patron: '2101', tipo: 'debe', concepto: 'Pago factura'},
+      {cuenta_patron: '1102', tipo: 'haber', concepto: 'Transferencia bancaria'},
+    ]
+  },
+  {
+    id: 'compra_combustible',
+    nombre: 'Compra Combustible',
+    tipo: 'E',
+    icon: '⛽',
+    color: 'amber',
+    partidas: [
+      {cuenta_patron: '5101', tipo: 'debe', concepto: 'Combustible'},
+      {cuenta_patron: '1120', tipo: 'debe', concepto: 'IVA acreditable'},
+      {cuenta_patron: '1102', tipo: 'haber', concepto: 'Pago combustible'},
+    ]
+  },
+  {
+    id: 'ingreso_servicio',
+    nombre: 'Ingreso por Servicio',
+    tipo: 'I',
+    icon: '⚡',
+    color: 'cyan',
+    partidas: [
+      {cuenta_patron: '1110', tipo: 'debe', concepto: 'Cuenta por cobrar'},
+      {cuenta_patron: '4101', tipo: 'haber', concepto: 'Ingreso por renta'},
+      {cuenta_patron: '2120-002', tipo: 'haber', concepto: 'IVA trasladado'},
+    ]
+  },
+  {
+    id: 'pago_nomina',
+    nombre: 'Pago de Nómina',
+    tipo: 'E',
+    icon: '👷',
+    color: 'purple',
+    partidas: [
+      {cuenta_patron: '5110', tipo: 'debe', concepto: 'Sueldos operadores'},
+      {cuenta_patron: '1102', tipo: 'haber', concepto: 'Pago nómina'},
+    ]
+  },
+  {
+    id: 'gasto_oficina',
+    nombre: 'Gasto de Oficina',
+    tipo: 'E',
+    icon: '🏢',
+    color: 'slate',
+    partidas: [
+      {cuenta_patron: '6125', tipo: 'debe', concepto: 'Papelería'},
+      {cuenta_patron: '1120', tipo: 'debe', concepto: 'IVA acreditable'},
+      {cuenta_patron: '1102', tipo: 'haber', concepto: 'Pago'},
+    ]
+  },
+];
+
+const TIPOS_CUENTA = {
+  'A': {nombre: 'Activo', color: 'blue'},
+  'P': {nombre: 'Pasivo', color: 'red'},
+  'C': {nombre: 'Capital', color: 'purple'},
+  'I': {nombre: 'Ingreso', color: 'emerald'},
+  'CO': {nombre: 'Costo', color: 'orange'},
+  'G': {nombre: 'Gasto', color: 'amber'},
+};
+
+const formatMoney = (num) => {
+  if (num === null || num === undefined || isNaN(num)) return '$0.00';
+  const abs = Math.abs(num);
+  const formatted = abs.toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  return num < 0 ? `($${formatted})` : `$${formatted}`;
+};
+
+// ============================================
+// APP PRINCIPAL
+// ============================================
+function App() {
+  const [vista, setVista] = useState('polizas');
+  const [sheetsUrl, setSheetsUrl] = useState('');
+  const [datosCargados, setDatosCargados] = useState(false);
+  const [periodoActual, setPeriodoActual] = useState('');
+  const [datos, setDatos] = useState({
+    catalogo: [],
+    periodos: [],
+    flujo_conceptos: [],
+    config: {}
+  });
+  
+  useEffect(() => {
+    const url = localStorage.getItem(SHEETS_URL_KEY) || '';
+    setSheetsUrl(url);
+    
+    // Cargar datos locales
+    setDatos({
+      catalogo: JSON.parse(localStorage.getItem('contagen_catalogo') || '[]'),
+      periodos: JSON.parse(localStorage.getItem('contagen_periodos') || '[]'),
+      flujo_conceptos: JSON.parse(localStorage.getItem('contagen_flujos') || '[]'),
+      config: JSON.parse(localStorage.getItem('contagen_config') || '{}')
+    });
+    
+    const periodo = localStorage.getItem('contagen_periodo_actual') || '';
+    setPeriodoActual(periodo);
+    
+    if (url && !datosCargados) {
+      cargarDatosDesdeSheets(url);
+    }
+  }, []);
+
+  const cargarDatosDesdeSheets = async (url) => {
+    if (!url) return null;
+    try {
+      const response = await fetch(url + '?action=all');
+      const data = await response.json();
+      if (data.success) {
+        const nuevosDatos = {
+          catalogo: data.catalogo || [],
+          periodos: data.periodos || [],
+          flujo_conceptos: data.flujo_conceptos || [],
+          config: data.config || {}
+        };
+        setDatos(nuevosDatos);
+        localStorage.setItem('contagen_catalogo', JSON.stringify(nuevosDatos.catalogo));
+        localStorage.setItem('contagen_periodos', JSON.stringify(nuevosDatos.periodos));
+        localStorage.setItem('contagen_flujos', JSON.stringify(nuevosDatos.flujo_conceptos));
+        localStorage.setItem('contagen_config', JSON.stringify(nuevosDatos.config));
+        
+        if (nuevosDatos.config.periodo_actual) {
+          setPeriodoActual(nuevosDatos.config.periodo_actual);
+          localStorage.setItem('contagen_periodo_actual', nuevosDatos.config.periodo_actual);
+        }
+        
+        setDatosCargados(true);
+        return data;
+      }
+    } catch (e) {
+      console.log('Error cargando datos:', e);
+    }
+    return null;
+  };
+
+  const cambiarPeriodo = (p) => {
+    setPeriodoActual(p);
+    localStorage.setItem('contagen_periodo_actual', p);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
+      {/* Header */}
+      <div className="bg-slate-800/90 backdrop-blur sticky top-0 z-20 px-4 py-3 border-b border-slate-700">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold text-emerald-500">💰 ContaGen</h1>
+          <div className="flex gap-1">
+            {['polizas','saldos','historial','config'].map(v => (
+              <button key={v} onClick={() => setVista(v)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${vista===v?'bg-emerald-500 text-slate-900':'bg-slate-700 text-slate-300'}`}>
+                {v==='polizas'?'📝':v==='saldos'?'💵':v==='historial'?'📋':'⚙️'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Periodo actual */}
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-slate-500 text-xs">Periodo:</span>
+          <select 
+            value={periodoActual} 
+            onChange={e => cambiarPeriodo(e.target.value)}
+            className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+          >
+            <option value="">Seleccionar...</option>
+            {datos.periodos.map(p => (
+              <option key={p.periodo_id} value={p.periodo_id}>
+                {p.nombre} {p.cerrado ? '🔒' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto">
+        {vista === 'polizas' && (
+          <PolizasRapidas 
+            sheetsUrl={sheetsUrl} 
+            catalogo={datos.catalogo}
+            periodoActual={periodoActual}
+            flujoConceptos={datos.flujo_conceptos}
+          />
+        )}
+        {vista === 'saldos' && (
+          <ConsultaSaldos 
+            sheetsUrl={sheetsUrl}
+            catalogo={datos.catalogo}
+            periodoActual={periodoActual}
+          />
+        )}
+        {vista === 'historial' && <Historial sheetsUrl={sheetsUrl} />}
+        {vista === 'config' && (
+          <Config 
+            sheetsUrl={sheetsUrl} 
+            setSheetsUrl={setSheetsUrl}
+            datos={datos}
+            cargarDatos={() => cargarDatosDesdeSheets(sheetsUrl)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// PÓLIZAS RÁPIDAS
+// ============================================
+function PolizasRapidas({sheetsUrl, catalogo, periodoActual, flujoConceptos}) {
+  const [modo, setModo] = useState('plantillas'); // plantillas, captura, manual
+  const [plantillaSeleccionada, setPlantillaSeleccionada] = useState(null);
+
+  if (!periodoActual) {
+    return (
+      <div className="p-4">
+        <div className="bg-amber-500/20 border border-amber-500/50 rounded-xl p-6 text-center">
+          <p className="text-amber-400 text-lg">⚠️ Seleccione un periodo</p>
+          <p className="text-slate-400 text-sm mt-2">Use el selector en la parte superior</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (modo === 'captura' && plantillaSeleccionada) {
+    return (
+      <CapturaPoliza 
+        sheetsUrl={sheetsUrl}
+        catalogo={catalogo}
+        periodoActual={periodoActual}
+        flujoConceptos={flujoConceptos}
+        plantilla={plantillaSeleccionada}
+        onVolver={() => {
+          setModo('plantillas');
+          setPlantillaSeleccionada(null);
+        }}
+      />
+    );
+  }
+
+  if (modo === 'manual') {
+    return (
+      <PolizaManual 
+        sheetsUrl={sheetsUrl}
+        catalogo={catalogo}
+        periodoActual={periodoActual}
+        flujoConceptos={flujoConceptos}
+        onVolver={() => setModo('plantillas')}
+      />
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-white font-semibold">📝 Póliza Rápida</h2>
+        <button 
+          onClick={() => setModo('manual')}
+          className="bg-slate-700 text-slate-300 px-3 py-1 rounded-lg text-sm"
+        >
+          ✏️ Manual
+        </button>
+      </div>
+
+      {/* Plantillas */}
+      <div className="grid grid-cols-2 gap-3">
+        {PLANTILLAS.map(p => (
+          <button
+            key={p.id}
+            onClick={() => {
+              setPlantillaSeleccionada(p);
+              setModo('captura');
+            }}
+            className={`bg-slate-800 border border-slate-700 rounded-xl p-4 text-left transition-all active:scale-95 hover:border-${p.color}-500/50`}
+          >
+            <span className="text-3xl">{p.icon}</span>
+            <p className="text-white font-medium mt-2 text-sm">{p.nombre}</p>
+            <p className={`text-${p.color}-400 text-xs mt-1`}>
+              {TIPOS_POLIZA.find(t => t.codigo === p.tipo)?.nombre}
+            </p>
+          </button>
+        ))}
+      </div>
+
+      {/* Instrucciones */}
+      <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+        <p className="text-slate-400 text-sm">
+          💡 Seleccione una plantilla para captura rápida o use "Manual" para crear una póliza personalizada.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// CAPTURA DE PÓLIZA (desde plantilla)
+// ============================================
+function CapturaPoliza({sheetsUrl, catalogo, periodoActual, flujoConceptos, plantilla, onVolver}) {
+  const [fecha, setFecha] = useState(HOY());
+  const [concepto, setConcepto] = useState('');
+  const [referencia, setReferencia] = useState('');
+  const [monto, setMonto] = useState('');
+  const [partidas, setPartidas] = useState([]);
+  const [guardando, setGuardando] = useState(false);
+
+  const cuentasAfectables = useMemo(() => 
+    catalogo.filter(c => c.afectable && c.activa),
+    [catalogo]
+  );
+
+  const cuentasEfectivo = useMemo(() => 
+    catalogo.filter(c => c.rubro_ef === 'EFECTIVO' && c.afectable),
+    [catalogo]
+  );
+
+  // Inicializar partidas desde plantilla
+  useEffect(() => {
+    const nuevasPartidas = plantilla.partidas.map((p, i) => {
+      // Buscar cuenta que coincida con el patrón
+      const cuenta = cuentasAfectables.find(c => c.cuenta_id.startsWith(p.cuenta_patron));
+      return {
+        id: i,
+        cuenta_id: cuenta?.cuenta_id || '',
+        cuenta_nombre: cuenta?.nombre || '',
+        concepto: p.concepto,
+        tipo: p.tipo, // 'debe' o 'haber'
+        monto: '',
+        flujo_concepto: ''
+      };
+    });
+    setPartidas(nuevasPartidas);
+  }, [plantilla, cuentasAfectables]);
+
+  // Calcular montos automáticamente cuando hay solo 2 partidas
+  const actualizarMonto = (valor) => {
+    setMonto(valor);
+    if (partidas.length === 2) {
+      const nuevasPartidas = partidas.map(p => ({...p, monto: valor}));
+      setPartidas(nuevasPartidas);
+    }
+  };
+
+  const actualizarPartida = (index, campo, valor) => {
+    const nuevas = [...partidas];
+    nuevas[index][campo] = valor;
+    
+    if (campo === 'cuenta_id') {
+      const cuenta = catalogo.find(c => c.cuenta_id === valor);
+      nuevas[index].cuenta_nombre = cuenta?.nombre || '';
+    }
+    
+    setPartidas(nuevas);
+  };
+
+  const totalDebe = partidas.filter(p => p.tipo === 'debe').reduce((s, p) => s + (parseFloat(p.monto) || 0), 0);
+  const totalHaber = partidas.filter(p => p.tipo === 'haber').reduce((s, p) => s + (parseFloat(p.monto) || 0), 0);
+  const cuadra = Math.abs(totalDebe - totalHaber) < 0.01;
+
+  const guardar = async () => {
+    if (!concepto.trim()) {
+      alert('Ingrese un concepto');
+      return;
+    }
+    if (!cuadra || totalDebe === 0) {
+      alert('Verifique los montos');
+      return;
+    }
+    if (partidas.some(p => !p.cuenta_id)) {
+      alert('Seleccione todas las cuentas');
+      return;
+    }
+
+    setGuardando(true);
+    
+    // Preparar payload
+    const payload = {
+      action: 'guardar_poliza',
+      tipo: plantilla.tipo,
+      fecha,
+      concepto,
+      referencia,
+      periodo_id: periodoActual,
+      usuario: 'Mobile',
+      partidas: partidas.map(p => {
+        const esEfectivo = cuentasEfectivo.some(c => c.cuenta_id === p.cuenta_id);
+        return {
+          cuenta_id: p.cuenta_id,
+          concepto: p.concepto || concepto,
+          debe: p.tipo === 'debe' ? parseFloat(p.monto) || 0 : 0,
+          haber: p.tipo === 'haber' ? parseFloat(p.monto) || 0 : 0,
+          flujo_categoria: esEfectivo ? (p.flujo_concepto?.split('-')[0] || '') : '',
+          flujo_concepto: esEfectivo ? p.flujo_concepto : ''
+        };
+      })
+    };
+
+    try {
+      if (sheetsUrl) {
+        const response = await fetch(sheetsUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        
+        // Guardar en historial local
+        const hist = JSON.parse(localStorage.getItem('contagen_historial') || '[]');
+        hist.unshift({
+          ...payload,
+          id: 'SYNC-' + Date.now(),
+          sincronizado: true,
+          timestamp: new Date().toISOString()
+        });
+        localStorage.setItem('contagen_historial', JSON.stringify(hist));
+        
+        alert('✅ Póliza enviada');
+        onVolver();
+      } else {
+        // Solo guardar local
+        const hist = JSON.parse(localStorage.getItem('contagen_historial') || '[]');
+        hist.unshift({
+          ...payload,
+          id: 'LOCAL-' + Date.now(),
+          sincronizado: false,
+          timestamp: new Date().toISOString()
+        });
+        localStorage.setItem('contagen_historial', JSON.stringify(hist));
+        
+        alert('💾 Guardado localmente');
+        onVolver();
+      }
+    } catch (e) {
+      alert('❌ Error: ' + e.message);
+    }
+    
+    setGuardando(false);
+  };
+
+  const requiereFlujo = plantilla.tipo === 'I' || plantilla.tipo === 'E';
+
+  return (
+    <div className="p-4 pb-8 space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button onClick={onVolver} className="text-slate-400 text-2xl">←</button>
+        <div>
+          <h2 className="text-white font-semibold flex items-center gap-2">
+            <span className="text-2xl">{plantilla.icon}</span>
+            {plantilla.nombre}
+          </h2>
+          <p className={`text-${plantilla.color}-400 text-xs`}>
+            Póliza de {TIPOS_POLIZA.find(t => t.codigo === plantilla.tipo)?.nombre}
+          </p>
+        </div>
+      </div>
+
+      {/* Datos generales */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-slate-400 text-xs">Fecha</label>
+            <input 
+              type="date" 
+              value={fecha} 
+              onChange={e => setFecha(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
+            />
+          </div>
+          <div>
+            <label className="text-slate-400 text-xs">Referencia</label>
+            <input 
+              type="text" 
+              value={referencia} 
+              onChange={e => setReferencia(e.target.value)}
+              placeholder="Factura, cheque..."
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-slate-400 text-xs">Concepto *</label>
+          <input 
+            type="text" 
+            value={concepto} 
+            onChange={e => setConcepto(e.target.value)}
+            placeholder="Descripción de la operación"
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
+          />
+        </div>
+        
+        {/* Monto rápido (si son 2 partidas simples) */}
+        {partidas.length === 2 && (
+          <div>
+            <label className="text-emerald-400 text-xs font-semibold">💰 Monto</label>
+            <input 
+              type="number" 
+              value={monto} 
+              onChange={e => actualizarMonto(e.target.value)}
+              placeholder="0.00"
+              className="w-full bg-slate-700 border border-emerald-600/50 rounded-lg px-3 py-3 text-white text-xl font-bold text-center"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Partidas */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h3 className="text-white font-medium mb-3">Partidas</h3>
+        <div className="space-y-3">
+          {partidas.map((p, i) => {
+            const esEfectivo = cuentasEfectivo.some(c => c.cuenta_id === p.cuenta_id);
+            
+            return (
+              <div key={i} className={`p-3 rounded-lg border ${p.tipo === 'debe' ? 'border-emerald-600/30 bg-emerald-500/5' : 'border-red-600/30 bg-red-500/5'}`}>
+                <div className="flex justify-between items-center mb-2">
+                  <span className={`text-xs font-semibold ${p.tipo === 'debe' ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {p.tipo === 'debe' ? '↑ CARGO' : '↓ ABONO'}
+                  </span>
+                  <span className="text-slate-500 text-xs">{p.concepto}</span>
+                </div>
+                
+                <select
+                  value={p.cuenta_id}
+                  onChange={e => actualizarPartida(i, 'cuenta_id', e.target.value)}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm mb-2"
+                >
+                  <option value="">Seleccionar cuenta...</option>
+                  {cuentasAfectables.map(c => (
+                    <option key={c.cuenta_id} value={c.cuenta_id}>
+                      {c.cuenta_id} - {c.nombre}
+                    </option>
+                  ))}
+                </select>
+                
+                {partidas.length > 2 && (
+                  <input
+                    type="number"
+                    value={p.monto}
+                    onChange={e => actualizarPartida(i, 'monto', e.target.value)}
+                    placeholder="Monto"
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm text-right mb-2"
+                  />
+                )}
+                
+                {/* Clasificación de flujo */}
+                {requiereFlujo && esEfectivo && (
+                  <select
+                    value={p.flujo_concepto}
+                    onChange={e => actualizarPartida(i, 'flujo_concepto', e.target.value)}
+                    className="w-full bg-slate-700 border border-amber-600/50 rounded-lg px-2 py-2 text-white text-sm"
+                  >
+                    <option value="">📊 Clasificar flujo...</option>
+                    {flujoConceptos.map(f => (
+                      <option key={f.concepto_id} value={f.concepto_id}>
+                        [{f.categoria}] {f.nombre}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Totales */}
+      <div className={`rounded-xl p-4 border ${cuadra ? 'bg-emerald-500/10 border-emerald-600/50' : 'bg-red-500/10 border-red-600/50'}`}>
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-slate-400 text-xs">Cargos</p>
+            <p className="text-emerald-400 font-bold">{formatMoney(totalDebe)}</p>
+          </div>
+          <div className={`text-2xl ${cuadra ? 'text-emerald-400' : 'text-red-400'}`}>
+            {cuadra ? '✓' : '≠'}
+          </div>
+          <div className="text-right">
+            <p className="text-slate-400 text-xs">Abonos</p>
+            <p className="text-red-400 font-bold">{formatMoney(totalHaber)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Botones */}
+      <div className="flex gap-3">
+        <button 
+          onClick={onVolver}
+          className="flex-1 bg-slate-700 text-slate-300 py-3 rounded-xl"
+        >
+          Cancelar
+        </button>
+        <button 
+          onClick={guardar}
+          disabled={guardando || !cuadra || totalDebe === 0}
+          className="flex-[2] bg-emerald-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl pulse-green"
+        >
+          {guardando ? '⏳ Guardando...' : '💾 Guardar Póliza'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// PÓLIZA MANUAL
+// ============================================
+function PolizaManual({sheetsUrl, catalogo, periodoActual, flujoConceptos, onVolver}) {
+  const [tipo, setTipo] = useState('D');
+  const [fecha, setFecha] = useState(HOY());
+  const [concepto, setConcepto] = useState('');
+  const [referencia, setReferencia] = useState('');
+  const [partidas, setPartidas] = useState([
+    {id: 1, cuenta_id: '', debe: '', haber: ''},
+    {id: 2, cuenta_id: '', debe: '', haber: ''}
+  ]);
+  const [guardando, setGuardando] = useState(false);
+
+  const cuentasAfectables = useMemo(() => 
+    catalogo.filter(c => c.afectable && c.activa),
+    [catalogo]
+  );
+
+  const cuentasEfectivo = useMemo(() => 
+    catalogo.filter(c => c.rubro_ef === 'EFECTIVO' && c.afectable),
+    [catalogo]
+  );
+
+  const agregarPartida = () => {
+    setPartidas([...partidas, {id: Date.now(), cuenta_id: '', debe: '', haber: '', flujo_concepto: ''}]);
+  };
+
+  const eliminarPartida = (id) => {
+    if (partidas.length > 2) {
+      setPartidas(partidas.filter(p => p.id !== id));
+    }
+  };
+
+  const actualizarPartida = (id, campo, valor) => {
+    setPartidas(partidas.map(p => p.id === id ? {...p, [campo]: valor} : p));
+  };
+
+  const totalDebe = partidas.reduce((s, p) => s + (parseFloat(p.debe) || 0), 0);
+  const totalHaber = partidas.reduce((s, p) => s + (parseFloat(p.haber) || 0), 0);
+  const cuadra = Math.abs(totalDebe - totalHaber) < 0.01;
+
+  const guardar = async () => {
+    if (!concepto.trim()) {
+      alert('Ingrese un concepto');
+      return;
+    }
+    if (!cuadra || totalDebe === 0) {
+      alert('La póliza debe cuadrar');
+      return;
+    }
+    if (partidas.some(p => !p.cuenta_id)) {
+      alert('Seleccione todas las cuentas');
+      return;
+    }
+
+    setGuardando(true);
+    
+    const payload = {
+      action: 'guardar_poliza',
+      tipo,
+      fecha,
+      concepto,
+      referencia,
+      periodo_id: periodoActual,
+      usuario: 'Mobile',
+      partidas: partidas.map(p => {
+        const esEfectivo = cuentasEfectivo.some(c => c.cuenta_id === p.cuenta_id);
+        return {
+          cuenta_id: p.cuenta_id,
+          concepto: concepto,
+          debe: parseFloat(p.debe) || 0,
+          haber: parseFloat(p.haber) || 0,
+          flujo_categoria: esEfectivo ? (p.flujo_concepto?.split('-')[0] || '') : '',
+          flujo_concepto: esEfectivo ? (p.flujo_concepto || '') : ''
+        };
+      })
+    };
+
+    try {
+      if (sheetsUrl) {
+        await fetch(sheetsUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        
+        const hist = JSON.parse(localStorage.getItem('contagen_historial') || '[]');
+        hist.unshift({...payload, id: 'SYNC-' + Date.now(), sincronizado: true, timestamp: new Date().toISOString()});
+        localStorage.setItem('contagen_historial', JSON.stringify(hist));
+        
+        alert('✅ Póliza enviada');
+        onVolver();
+      } else {
+        const hist = JSON.parse(localStorage.getItem('contagen_historial') || '[]');
+        hist.unshift({...payload, id: 'LOCAL-' + Date.now(), sincronizado: false, timestamp: new Date().toISOString()});
+        localStorage.setItem('contagen_historial', JSON.stringify(hist));
+        
+        alert('💾 Guardado localmente');
+        onVolver();
+      }
+    } catch (e) {
+      alert('❌ Error: ' + e.message);
+    }
+    
+    setGuardando(false);
+  };
+
+  const requiereFlujo = tipo === 'I' || tipo === 'E';
+
+  return (
+    <div className="p-4 pb-8 space-y-4">
+      <div className="flex items-center gap-3">
+        <button onClick={onVolver} className="text-slate-400 text-2xl">←</button>
+        <h2 className="text-white font-semibold">✏️ Póliza Manual</h2>
+      </div>
+
+      {/* Encabezado */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-slate-400 text-xs">Tipo</label>
+            <select 
+              value={tipo} 
+              onChange={e => setTipo(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
+            >
+              {TIPOS_POLIZA.map(t => (
+                <option key={t.codigo} value={t.codigo}>{t.icon} {t.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-slate-400 text-xs">Fecha</label>
+            <input 
+              type="date" 
+              value={fecha} 
+              onChange={e => setFecha(e.target.value)}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-slate-400 text-xs">Concepto *</label>
+          <input 
+            type="text" 
+            value={concepto} 
+            onChange={e => setConcepto(e.target.value)}
+            placeholder="Descripción"
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
+          />
+        </div>
+        <div>
+          <label className="text-slate-400 text-xs">Referencia</label>
+          <input 
+            type="text" 
+            value={referencia} 
+            onChange={e => setReferencia(e.target.value)}
+            placeholder="Factura, cheque..."
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
+          />
+        </div>
+      </div>
+
+      {/* Partidas */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-white font-medium">Partidas</h3>
+          <button 
+            onClick={agregarPartida}
+            className="bg-slate-700 text-white px-3 py-1 rounded text-sm"
+          >
+            + Agregar
+          </button>
+        </div>
+        
+        <div className="space-y-3">
+          {partidas.map((p, i) => {
+            const esEfectivo = cuentasEfectivo.some(c => c.cuenta_id === p.cuenta_id);
+            
+            return (
+              <div key={p.id} className="bg-slate-700/30 rounded-lg p-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-slate-500 text-xs">Partida {i + 1}</span>
+                  {partidas.length > 2 && (
+                    <button onClick={() => eliminarPartida(p.id)} className="text-red-400 text-sm">✕</button>
+                  )}
+                </div>
+                
+                <select
+                  value={p.cuenta_id}
+                  onChange={e => actualizarPartida(p.id, 'cuenta_id', e.target.value)}
+                  className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-2 text-white text-sm mb-2"
+                >
+                  <option value="">Cuenta...</option>
+                  {cuentasAfectables.map(c => (
+                    <option key={c.cuenta_id} value={c.cuenta_id}>
+                      {c.cuenta_id} - {c.nombre}
+                    </option>
+                  ))}
+                </select>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-emerald-400 text-xs">Debe</label>
+                    <input
+                      type="number"
+                      value={p.debe}
+                      onChange={e => actualizarPartida(p.id, 'debe', e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-slate-700 border border-emerald-600/30 rounded px-2 py-2 text-white text-sm text-right"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-red-400 text-xs">Haber</label>
+                    <input
+                      type="number"
+                      value={p.haber}
+                      onChange={e => actualizarPartida(p.id, 'haber', e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-slate-700 border border-red-600/30 rounded px-2 py-2 text-white text-sm text-right"
+                    />
+                  </div>
+                </div>
+                
+                {requiereFlujo && esEfectivo && (
+                  <select
+                    value={p.flujo_concepto || ''}
+                    onChange={e => actualizarPartida(p.id, 'flujo_concepto', e.target.value)}
+                    className="w-full mt-2 bg-slate-700 border border-amber-600/50 rounded px-2 py-2 text-white text-sm"
+                  >
+                    <option value="">📊 Clasificar flujo...</option>
+                    {flujoConceptos.map(f => (
+                      <option key={f.concepto_id} value={f.concepto_id}>
+                        [{f.categoria}] {f.nombre}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Totales */}
+      <div className={`rounded-xl p-4 border ${cuadra ? 'bg-emerald-500/10 border-emerald-600/50' : 'bg-red-500/10 border-red-600/50'}`}>
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-slate-400 text-xs">Total Debe</p>
+            <p className="text-emerald-400 font-bold">{formatMoney(totalDebe)}</p>
+          </div>
+          <div className={`text-2xl ${cuadra ? 'text-emerald-400' : 'text-red-400'}`}>
+            {cuadra ? '✓' : '≠'}
+          </div>
+          <div className="text-right">
+            <p className="text-slate-400 text-xs">Total Haber</p>
+            <p className="text-red-400 font-bold">{formatMoney(totalHaber)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Botones */}
+      <div className="flex gap-3">
+        <button onClick={onVolver} className="flex-1 bg-slate-700 text-slate-300 py-3 rounded-xl">
+          Cancelar
+        </button>
+        <button 
+          onClick={guardar}
+          disabled={guardando || !cuadra || totalDebe === 0}
+          className="flex-[2] bg-emerald-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl"
+        >
+          {guardando ? '⏳...' : '💾 Guardar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// CONSULTA DE SALDOS
+// ============================================
+function ConsultaSaldos({sheetsUrl, catalogo, periodoActual}) {
+  const [balanza, setBalanza] = useState([]);
+  const [cargando, setCargando] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState('');
+
+  const cargarBalanza = async () => {
+    if (!sheetsUrl || !periodoActual) return;
+    setCargando(true);
+    try {
+      const response = await fetch(`${sheetsUrl}?action=balanza&periodo=${periodoActual}`);
+      const data = await response.json();
+      if (data.success) {
+        setBalanza(data.balanza || []);
+        localStorage.setItem('contagen_balanza', JSON.stringify(data.balanza || []));
+      }
+    } catch (e) {
+      // Intentar cargar desde local
+      const local = JSON.parse(localStorage.getItem('contagen_balanza') || '[]');
+      setBalanza(local);
+    }
+    setCargando(false);
+  };
+
+  useEffect(() => {
+    // Cargar desde local primero
+    const local = JSON.parse(localStorage.getItem('contagen_balanza') || '[]');
+    setBalanza(local);
+    
+    if (periodoActual) {
+      cargarBalanza();
+    }
+  }, [periodoActual]);
+
+  const balanzaFiltrada = useMemo(() => {
+    return balanza.filter(b => {
+      if (filtroTipo && b.tipo !== filtroTipo) return false;
+      if (busqueda) {
+        const term = busqueda.toLowerCase();
+        return b.cuenta_id.toLowerCase().includes(term) || b.nombre.toLowerCase().includes(term);
+      }
+      return true;
+    });
+  }, [balanza, busqueda, filtroTipo]);
+
+  const totales = useMemo(() => {
+    return balanzaFiltrada.reduce((acc, b) => ({
+      deudor: acc.deudor + (b.saldo_final_deudor || 0),
+      acreedor: acc.acreedor + (b.saldo_final_acreedor || 0)
+    }), {deudor: 0, acreedor: 0});
+  }, [balanzaFiltrada]);
+
+  if (!periodoActual) {
+    return (
+      <div className="p-4">
+        <div className="bg-amber-500/20 border border-amber-500/50 rounded-xl p-6 text-center">
+          <p className="text-amber-400 text-lg">⚠️ Seleccione un periodo</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-white font-semibold">💵 Saldos</h2>
+        <button 
+          onClick={cargarBalanza}
+          disabled={cargando}
+          className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-sm"
+        >
+          {cargando ? '⏳' : '🔄'}
+        </button>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          placeholder="🔍 Buscar cuenta..."
+          className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+        />
+        <select
+          value={filtroTipo}
+          onChange={e => setFiltroTipo(e.target.value)}
+          className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm"
+        >
+          <option value="">Todos</option>
+          {Object.entries(TIPOS_CUENTA).map(([k, v]) => (
+            <option key={k} value={k}>{v.nombre}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Lista de saldos */}
+      <div className="space-y-2 max-h-[60vh] overflow-y-auto no-scrollbar">
+        {balanzaFiltrada.length === 0 ? (
+          <div className="text-center py-8 text-slate-500">
+            {balanza.length === 0 ? 'Sin datos. Presione 🔄' : 'Sin resultados'}
+          </div>
+        ) : (
+          balanzaFiltrada.map(b => {
+            const tipoInfo = TIPOS_CUENTA[b.tipo];
+            const saldo = b.saldo_final_deudor - b.saldo_final_acreedor;
+            const tieneMovimientos = b.cargos > 0 || b.abonos > 0;
+            
+            return (
+              <div 
+                key={b.cuenta_id} 
+                className={`bg-slate-800 rounded-lg p-3 border border-slate-700 ${tieneMovimientos ? 'border-l-4 border-l-emerald-500' : ''}`}
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <p className="text-white font-mono text-sm">{b.cuenta_id}</p>
+                    <p className="text-slate-400 text-xs truncate">{b.nombre}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-bold font-mono ${saldo >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {formatMoney(Math.abs(saldo))}
+                    </p>
+                    <p className="text-slate-500 text-xs">
+                      {b.saldo_final_deudor > 0 ? 'Deudor' : b.saldo_final_acreedor > 0 ? 'Acreedor' : ''}
+                    </p>
+                  </div>
+                </div>
+                {tieneMovimientos && (
+                  <div className="mt-2 pt-2 border-t border-slate-700 flex justify-between text-xs">
+                    <span className="text-emerald-400">↑ {formatMoney(b.cargos)}</span>
+                    <span className="text-red-400">↓ {formatMoney(b.abonos)}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Totales */}
+      {balanzaFiltrada.length > 0 && (
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-slate-400 text-xs">Saldos Deudores</p>
+              <p className="text-emerald-400 font-bold">{formatMoney(totales.deudor)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-slate-400 text-xs">Saldos Acreedores</p>
+              <p className="text-red-400 font-bold">{formatMoney(totales.acreedor)}</p>
+            </div>
+          </div>
+          <div className={`mt-2 pt-2 border-t border-slate-700 text-center ${Math.abs(totales.deudor - totales.acreedor) < 0.01 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {Math.abs(totales.deudor - totales.acreedor) < 0.01 ? '✓ Balanza cuadra' : `✗ Diferencia: ${formatMoney(totales.deudor - totales.acreedor)}`}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// HISTORIAL
+// ============================================
+function Historial({sheetsUrl}) {
+  const [hist, setHist] = useState([]);
+  const [enviando, setEnviando] = useState(null);
+
+  useEffect(() => {
+    setHist(JSON.parse(localStorage.getItem('contagen_historial') || '[]'));
+  }, []);
+
+  const sincronizar = async (item, idx) => {
+    if (!sheetsUrl) {
+      alert('Configure URL de Sheets');
+      return;
+    }
+    setEnviando(idx);
+    try {
+      await fetch(sheetsUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(item)
+      });
+      
+      const newHist = [...hist];
+      newHist[idx].sincronizado = true;
+      newHist[idx].id = newHist[idx].id.replace('LOCAL-', 'SYNC-');
+      setHist(newHist);
+      localStorage.setItem('contagen_historial', JSON.stringify(newHist));
+      alert('✅ Sincronizado');
+    } catch (e) {
+      alert('❌ Error de sincronización');
+    }
+    setEnviando(null);
+  };
+
+  const eliminar = (idx) => {
+    if (!confirm('¿Eliminar este registro?')) return;
+    const newHist = hist.filter((_, i) => i !== idx);
+    setHist(newHist);
+    localStorage.setItem('contagen_historial', JSON.stringify(newHist));
+  };
+
+  const pendientes = hist.filter(h => !h.sincronizado).length;
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-white font-semibold">📋 Historial</h2>
+        {pendientes > 0 && (
+          <span className="bg-amber-500 text-slate-900 text-xs px-2 py-1 rounded-full font-medium">
+            {pendientes} pendientes
+          </span>
+        )}
+      </div>
+
+      {hist.length === 0 ? (
+        <div className="bg-slate-800/50 rounded-xl p-8 text-center">
+          <p className="text-slate-500">Sin pólizas capturadas</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {hist.map((h, idx) => {
+            const tipoInfo = TIPOS_POLIZA.find(t => t.codigo === h.tipo);
+            const total = h.partidas?.reduce((s, p) => s + (parseFloat(p.debe) || 0), 0) || 0;
+            
+            return (
+              <div 
+                key={h.id || idx} 
+                className={`bg-slate-800 rounded-xl p-4 border ${h.sincronizado ? 'border-emerald-600/50' : 'border-amber-600/50'}`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{tipoInfo?.icon}</span>
+                      <span className={`text-${tipoInfo?.color}-400 font-semibold`}>{tipoInfo?.nombre}</span>
+                    </div>
+                    <p className="text-white text-sm mt-1">{h.concepto}</p>
+                    <p className="text-slate-500 text-xs">{h.fecha} • {h.periodo_id}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-white font-bold">{formatMoney(total)}</p>
+                    <span className={`text-xs px-2 py-1 rounded ${h.sincronizado ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                      {h.sincronizado ? '✓ Sync' : '⏳ Pend'}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2 mt-3">
+                  {!h.sincronizado && (
+                    <button 
+                      onClick={() => sincronizar(h, idx)}
+                      disabled={enviando === idx}
+                      className="flex-1 bg-emerald-600 text-white text-sm py-2 rounded-lg"
+                    >
+                      {enviando === idx ? '⏳...' : '☁️ Sincronizar'}
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => eliminar(idx)}
+                    className="bg-red-600/20 text-red-400 text-sm py-2 px-3 rounded-lg"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// CONFIGURACIÓN
+// ============================================
+function Config({sheetsUrl, setSheetsUrl, datos, cargarDatos}) {
+  const [url, setUrl] = useState(sheetsUrl);
+  const [cargando, setCargando] = useState(false);
+
+  const guardarUrl = () => {
+    localStorage.setItem(SHEETS_URL_KEY, url);
+    setSheetsUrl(url);
+    alert('✅ URL guardada');
+  };
+
+  const sincronizar = async () => {
+    if (!url) {
+      alert('Primero guarde la URL');
+      return;
+    }
+    setCargando(true);
+    const result = await cargarDatos();
+    setCargando(false);
+    if (result) {
+      alert(`✅ Datos sincronizados:\n${result.catalogo?.length || 0} cuentas\n${result.periodos?.length || 0} periodos`);
+    } else {
+      alert('❌ Error al sincronizar');
+    }
+  };
+
+  const limpiarHistorial = () => {
+    if (confirm('¿Eliminar TODO el historial local?')) {
+      localStorage.removeItem('contagen_historial');
+      alert('✅ Historial eliminado');
+    }
+  };
+
+  return (
+    <div className="p-4 pb-8 space-y-4">
+      {/* URL de Sheets */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h2 className="text-white font-semibold mb-3">🔗 Google Sheets</h2>
+        <input 
+          type="url" 
+          value={url} 
+          onChange={e => setUrl(e.target.value)}
+          placeholder="URL del Web App..."
+          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+        />
+        <div className="flex gap-2 mt-3">
+          <button 
+            onClick={guardarUrl}
+            className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm"
+          >
+            💾 Guardar
+          </button>
+          <button 
+            onClick={sincronizar}
+            disabled={cargando}
+            className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm"
+          >
+            {cargando ? '⏳...' : '🔄 Sincronizar'}
+          </button>
+        </div>
+      </div>
+
+      {/* Información */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h2 className="text-white font-semibold mb-3">🏢 Empresa</h2>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-slate-400">Razón Social</span>
+            <span className="text-white">{datos.config.empresa_nombre || '-'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">RFC</span>
+            <span className="text-white font-mono">{datos.config.empresa_rfc || '-'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">Ejercicio</span>
+            <span className="text-white">{datos.config.ejercicio_actual || '-'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Resumen de datos */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+          <p className="text-2xl font-bold text-blue-400">{datos.catalogo.length}</p>
+          <p className="text-slate-400 text-xs">Cuentas</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+          <p className="text-2xl font-bold text-emerald-400">{datos.periodos.length}</p>
+          <p className="text-slate-400 text-xs">Periodos</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+          <p className="text-2xl font-bold text-purple-400">{datos.flujo_conceptos.length}</p>
+          <p className="text-slate-400 text-xs">Flujos</p>
+        </div>
+      </div>
+
+      {/* Zona de peligro */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-red-900/50">
+        <h2 className="text-red-400 font-semibold mb-3">⚠️ Zona de Peligro</h2>
+        <button 
+          onClick={limpiarHistorial}
+          className="w-full bg-red-600/20 text-red-400 py-2 rounded-lg text-sm border border-red-600/50"
+        >
+          🗑️ Eliminar Historial Local
+        </button>
+      </div>
+
+      {/* Versión */}
+      <div className="text-center text-slate-600 text-xs">
+        ContaGen Mobile v1.0
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// RENDER
+// ============================================
+ReactDOM.render(<App/>, document.getElementById('root'));
+</script>
+</body>
+</html>
