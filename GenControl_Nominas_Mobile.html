@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#10b981">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Nóminas">
+  <title>GenControl - Nóminas</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%2310b981' width='100' height='100' rx='15'/%3E%3Ctext x='50' y='65' font-size='50' text-anchor='middle' fill='%23fff'%3E💰%3C/text%3E%3C/svg%3E">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    *{-webkit-tap-highlight-color:transparent}
+    body{margin:0}
+    input,select{font-size:16px!important}
+    .no-scrollbar::-webkit-scrollbar{display:none}
+    .no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState, useEffect} = React;
+
+// ============================================
+// CONSTANTES
+// ============================================
+const SHEETS_URL_KEY = 'nominas_sheets_url';
+const HOY = () => new Date().toISOString().split('T')[0];
+
+// Obtener lunes de la semana actual
+const getLunesSemana = (fecha = new Date()) => {
+  const d = new Date(fecha);
+  const dia = d.getDay();
+  const diff = dia === 0 ? -6 : 1 - dia;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().split('T')[0];
+};
+
+// Obtener domingo de la semana
+const getDomingoSemana = (fecha = new Date()) => {
+  const lunes = new Date(getLunesSemana(fecha));
+  lunes.setDate(lunes.getDate() + 6);
+  return lunes.toISOString().split('T')[0];
+};
+
+// Generar ID de nómina
+const generarNominaId = (fechaInicio) => {
+  const fecha = new Date(fechaInicio);
+  const año = fecha.getFullYear();
+  const inicioAño = new Date(año, 0, 1);
+  const dias = Math.floor((fecha - inicioAño) / (24 * 60 * 60 * 1000));
+  const semana = Math.ceil((dias + inicioAño.getDay() + 1) / 7);
+  return `NOM-${año}-${String(semana).padStart(2, '0')}`;
+};
+
+// Formatear moneda
+const formatMoney = (num) => {
+  return '$' + (parseFloat(num) || 0).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+};
+
+// ============================================
+// FUNCIONES DE API
+// ============================================
+async function cargarDatosDesdeSheets(url) {
+  if (!url) return null;
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data.success) {
+      if (data.operadoresNomina) localStorage.setItem('nom_operadores', JSON.stringify(data.operadoresNomina));
+      if (data.servicios) localStorage.setItem('nom_servicios', JSON.stringify(data.servicios));
+      if (data.prestamos) localStorage.setItem('nom_prestamos', JSON.stringify(data.prestamos));
+      if (data.faltas) localStorage.setItem('nom_faltas', JSON.stringify(data.faltas));
+      if (data.actividades) localStorage.setItem('nom_actividades', JSON.stringify(data.actividades));
+      if (data.nominas) localStorage.setItem('nom_nominas', JSON.stringify(data.nominas));
+      return data;
+    }
+  } catch (e) {
+    console.log('Error cargando datos:', e);
+  }
+  return null;
+}
+
+async function enviarDatos(url, data) {
+  if (!url) return { success: false, error: 'URL no configurada' };
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// ============================================
+// APP PRINCIPAL
+// ============================================
+function App() {
+  const [vista, setVista] = useState('nomina');
+  const [sheetsUrl, setSheetsUrl] = useState('');
+  const [cargando, setCargando] = useState(false);
+  
+  useEffect(() => {
+    const url = localStorage.getItem(SHEETS_URL_KEY) || '';
+    setSheetsUrl(url);
+    if (url) {
+      setCargando(true);
+      cargarDatosDesdeSheets(url).finally(() => setCargando(false));
+    }
+  }, []);
+
+  const sincronizar = async () => {
+    if (!sheetsUrl) return;
+    setCargando(true);
+    await cargarDatosDesdeSheets(sheetsUrl);
+    setCargando(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
+      {/* Header */}
+      <div className="bg-slate-800/90 backdrop-blur sticky top-0 z-20 px-4 py-3 border-b border-slate-700">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold text-emerald-500">💰 Nóminas</h1>
+          <div className="flex gap-1">
+            {['nomina','incidencias','historial','config'].map(v => (
+              <button key={v} onClick={() => setVista(v)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                  vista===v ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-300'
+                }`}>
+                {v==='nomina'?'📋':v==='incidencias'?'📝':v==='historial'?'📊':'⚙️'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      
+      {/* Contenido */}
+      <div className="max-w-lg mx-auto pb-20">
+        {cargando && (
+          <div className="bg-emerald-500/20 text-emerald-400 text-center py-2 text-sm">
+            Sincronizando...
+          </div>
+        )}
+        {vista === 'nomina' && <NominaActual sheetsUrl={sheetsUrl} onSync={sincronizar} />}
+        {vista === 'incidencias' && <Incidencias sheetsUrl={sheetsUrl} />}
+        {vista === 'historial' && <Historial sheetsUrl={sheetsUrl} />}
+        {vista === 'config' && <Config sheetsUrl={sheetsUrl} setSheetsUrl={setSheetsUrl} />}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// NÓMINA ACTUAL
+// ============================================
+function NominaActual({sheetsUrl, onSync}) {
+  const [operadores, setOperadores] = useState([]);
+  const [servicios, setServicios] = useState([]);
+  const [prestamos, setPrestamos] = useState([]);
+  const [faltas, setFaltas] = useState([]);
+  const [actividades, setActividades] = useState([]);
+  const [nominaCalculada, setNominaCalculada] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  
+  const lunes = getLunesSemana();
+  const domingo = getDomingoSemana();
+  const nominaId = generarNominaId(lunes);
+
+  useEffect(() => {
+    setOperadores(JSON.parse(localStorage.getItem('nom_operadores') || '[]'));
+    setServicios(JSON.parse(localStorage.getItem('nom_servicios') || '[]'));
+    setPrestamos(JSON.parse(localStorage.getItem('nom_prestamos') || '[]'));
+    setFaltas(JSON.parse(localStorage.getItem('nom_faltas') || '[]'));
+    setActividades(JSON.parse(localStorage.getItem('nom_actividades') || '[]'));
+  }, []);
+
+  // Calcular nómina
+  const calcularNomina = () => {
+    const detalles = [];
+    let totalBruto = 0;
+    let totalDeducciones = 0;
+    let totalNeto = 0;
+
+    for (const op of operadores) {
+      if (!op.activo) continue;
+
+      // Filtrar servicios del operador en el periodo
+      const serviciosOp = servicios.filter(s => {
+        const fechaSrv = new Date(s.fecha_enc || s.fecha);
+        const fechaLunes = new Date(lunes);
+        const fechaDomingo = new Date(domingo);
+        return (s.operador === op.id || s.operador === op.nombre) &&
+               fechaSrv >= fechaLunes && fechaSrv <= fechaDomingo;
+      });
+
+      // Calcular horas extra por servicio
+      let horasExtraTotal = 0;
+      for (const srv of serviciosOp) {
+        const horas = parseFloat(srv.horas) || 0;
+        horasExtraTotal += Math.max(0, horas - 10);
+      }
+
+      // Servicios adicionales
+      const serviciosAdicionales = Math.max(0, serviciosOp.length - 1);
+
+      // Actividades extra
+      const actividadesOp = actividades.filter(a => 
+        a.operador_id === op.id && a.periodo_nomina === nominaId && !a.pagada
+      );
+      const actividadesMonto = actividadesOp.reduce((sum, a) => sum + (parseFloat(a.monto) || 0), 0);
+
+      // Calcular bruto
+      const sueldoBase = parseFloat(op.sueldo_base) || 0;
+      const pagoServicios = serviciosAdicionales * (parseFloat(op.pago_servicio) || 0);
+      const pagoHorasExtra = horasExtraTotal * (parseFloat(op.pago_hora_extra) || 0);
+      const bruto = sueldoBase + pagoServicios + pagoHorasExtra + actividadesMonto;
+
+      // Deducciones - Préstamos
+      const prestamosOp = prestamos.filter(p => p.operador_id === op.id && p.estatus === 'activo');
+      let descuentoPrestamos = 0;
+      for (const p of prestamosOp) {
+        const saldo = parseFloat(p.saldo_pendiente) || 0;
+        const descuento = parseFloat(p.descuento_semanal) || 0;
+        descuentoPrestamos += Math.min(descuento, saldo);
+      }
+
+      // Deducciones - Faltas
+      const faltasOp = faltas.filter(f => 
+        f.operador_id === op.id && f.periodo_nomina === nominaId && !f.aplicada
+      );
+      const descuentoFaltas = faltasOp.reduce((sum, f) => sum + (parseFloat(f.descuento) || 0), 0);
+
+      const deducciones = descuentoPrestamos + descuentoFaltas;
+      const neto = bruto - deducciones;
+
+      detalles.push({
+        operadorId: op.id,
+        operadorNombre: op.nombre,
+        sueldoBase,
+        serviciosRealizados: serviciosOp.length,
+        serviciosPago: pagoServicios,
+        horasExtraTotal,
+        horasExtraPago: pagoHorasExtra,
+        actividadesExtra: actividadesOp.length,
+        actividadesPago: actividadesMonto,
+        totalBruto: bruto,
+        descuentoPrestamos,
+        descuentoFaltas,
+        totalDeducciones: deducciones,
+        totalNeto: neto,
+        banco: op.banco || '',
+        clabe: op.clabe || ''
+      });
+
+      totalBruto += bruto;
+      totalDeducciones += deducciones;
+      totalNeto += neto;
+    }
+
+    setNominaCalculada({
+      nominaId,
+      periodoInicio: lunes,
+      periodoFin: domingo,
+      totalBruto,
+      totalDeducciones,
+      totalNeto,
+      detalles
+    });
+  };
+
+  // Guardar nómina
+  const guardarNomina = async () => {
+    if (!nominaCalculada) return;
+    setGuardando(true);
+    
+    const resultado = await enviarDatos(sheetsUrl, {
+      action: 'guardar_nomina',
+      ...nominaCalculada
+    });
+    
+    setGuardando(false);
+    
+    if (resultado.success) {
+      alert(`✅ Nómina ${nominaId} guardada correctamente`);
+      onSync && onSync();
+    } else {
+      alert(`❌ Error: ${resultado.error}`);
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Periodo */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-slate-400 text-xs">Periodo Semanal</p>
+            <p className="text-white font-bold">{nominaId}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-slate-400 text-xs">Fechas</p>
+            <p className="text-emerald-400 text-sm">{lunes} → {domingo}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Botón Calcular */}
+      <button 
+        onClick={calcularNomina}
+        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl transition-all"
+      >
+        🔄 Calcular Nómina
+      </button>
+
+      {/* Resultado */}
+      {nominaCalculada && (
+        <>
+          {/* Resumen */}
+          <div className="bg-gradient-to-br from-emerald-900/50 to-slate-800 rounded-xl p-4 border border-emerald-700/50">
+            <h3 className="text-emerald-400 font-bold mb-3">📊 Resumen</h3>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-slate-800/50 rounded-lg p-2">
+                <p className="text-slate-400 text-xs">Bruto</p>
+                <p className="text-white font-bold text-sm">{formatMoney(nominaCalculada.totalBruto)}</p>
+              </div>
+              <div className="bg-slate-800/50 rounded-lg p-2">
+                <p className="text-slate-400 text-xs">Deducciones</p>
+                <p className="text-red-400 font-bold text-sm">-{formatMoney(nominaCalculada.totalDeducciones)}</p>
+              </div>
+              <div className="bg-emerald-600/30 rounded-lg p-2">
+                <p className="text-slate-300 text-xs">Neto</p>
+                <p className="text-emerald-400 font-bold">{formatMoney(nominaCalculada.totalNeto)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Detalle por operador */}
+          <div className="space-y-3">
+            <h3 className="text-white font-semibold">👷 Detalle por Operador</h3>
+            
+            {nominaCalculada.detalles.map((det, i) => (
+              <div key={i} className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <p className="text-white font-semibold">{det.operadorNombre}</p>
+                    <p className="text-slate-400 text-xs">{det.operadorId}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-emerald-400 font-bold">{formatMoney(det.totalNeto)}</p>
+                    <p className="text-slate-500 text-xs">neto</p>
+                  </div>
+                </div>
+
+                {/* Ingresos */}
+                <div className="space-y-1 text-sm border-t border-slate-700 pt-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Sueldo base</span>
+                    <span className="text-slate-300">{formatMoney(det.sueldoBase)}</span>
+                  </div>
+                  {det.serviciosRealizados > 1 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Servicios ({det.serviciosRealizados - 1} adic.)</span>
+                      <span className="text-emerald-400">+{formatMoney(det.serviciosPago)}</span>
+                    </div>
+                  )}
+                  {det.horasExtraTotal > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Horas extra ({det.horasExtraTotal}h)</span>
+                      <span className="text-emerald-400">+{formatMoney(det.horasExtraPago)}</span>
+                    </div>
+                  )}
+                  {det.actividadesExtra > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Actividades ({det.actividadesExtra})</span>
+                      <span className="text-emerald-400">+{formatMoney(det.actividadesPago)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Deducciones */}
+                {det.totalDeducciones > 0 && (
+                  <div className="space-y-1 text-sm border-t border-slate-700 pt-2 mt-2">
+                    {det.descuentoPrestamos > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Préstamos</span>
+                        <span className="text-red-400">-{formatMoney(det.descuentoPrestamos)}</span>
+                      </div>
+                    )}
+                    {det.descuentoFaltas > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Faltas</span>
+                        <span className="text-red-400">-{formatMoney(det.descuentoFaltas)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Total */}
+                <div className="flex justify-between border-t border-slate-600 pt-2 mt-2 font-semibold">
+                  <span className="text-white">Total Bruto</span>
+                  <span className="text-white">{formatMoney(det.totalBruto)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Botón Guardar */}
+          <button 
+            onClick={guardarNomina}
+            disabled={guardando}
+            className="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-slate-600 text-slate-900 font-bold py-3 rounded-xl transition-all"
+          >
+            {guardando ? '⏳ Guardando...' : '💾 Guardar Nómina'}
+          </button>
+        </>
+      )}
+
+      {/* Sin operadores */}
+      {operadores.length === 0 && (
+        <div className="bg-amber-500/20 border border-amber-500/50 rounded-xl p-4 text-center">
+          <p className="text-amber-400">⚠️ No hay operadores configurados</p>
+          <p className="text-slate-400 text-sm mt-1">Configura la URL del servidor y sincroniza</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// INCIDENCIAS (Préstamos, Faltas, Actividades)
+// ============================================
+function Incidencias({sheetsUrl}) {
+  const [tab, setTab] = useState('prestamo');
+  const [operadores, setOperadores] = useState([]);
+  
+  useEffect(() => {
+    setOperadores(JSON.parse(localStorage.getItem('nom_operadores') || '[]'));
+  }, []);
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {[
+          {id: 'prestamo', label: '💵 Préstamo', color: 'amber'},
+          {id: 'falta', label: '❌ Falta', color: 'red'},
+          {id: 'actividad', label: '⭐ Actividad', color: 'blue'}
+        ].map(t => (
+          <button 
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+              tab === t.id 
+                ? `bg-${t.color}-500 text-slate-900` 
+                : 'bg-slate-700 text-slate-300'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Formularios */}
+      {tab === 'prestamo' && <FormPrestamo operadores={operadores} sheetsUrl={sheetsUrl} />}
+      {tab === 'falta' && <FormFalta operadores={operadores} sheetsUrl={sheetsUrl} />}
+      {tab === 'actividad' && <FormActividad operadores={operadores} sheetsUrl={sheetsUrl} />}
+    </div>
+  );
+}
+
+// Formulario de Préstamo
+function FormPrestamo({operadores, sheetsUrl}) {
+  const [operadorId, setOperadorId] = useState('');
+  const [monto, setMonto] = useState('');
+  const [descuentoSemanal, setDescuentoSemanal] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  const semanas = monto && descuentoSemanal ? Math.ceil(parseFloat(monto) / parseFloat(descuentoSemanal)) : 0;
+
+  const guardar = async () => {
+    if (!operadorId || !monto || !descuentoSemanal) {
+      alert('Complete todos los campos obligatorios');
+      return;
+    }
+
+    setGuardando(true);
+    const resultado = await enviarDatos(sheetsUrl, {
+      action: 'registrar_prestamo',
+      operador_id: operadorId,
+      monto: parseFloat(monto),
+      descuento_semanal: parseFloat(descuentoSemanal),
+      motivo,
+      fecha: HOY()
+    });
+    setGuardando(false);
+
+    if (resultado.success) {
+      alert(`✅ Préstamo registrado: ${resultado.id}`);
+      setOperadorId('');
+      setMonto('');
+      setDescuentoSemanal('');
+      setMotivo('');
+    } else {
+      alert(`❌ Error: ${resultado.error}`);
+    }
+  };
+
+  return (
+    <div className="bg-slate-800 rounded-xl p-4 border border-amber-500/30 space-y-4">
+      <h3 className="text-amber-400 font-bold">💵 Registrar Préstamo</h3>
+      
+      <div>
+        <label className="text-slate-400 text-xs">Operador *</label>
+        <select 
+          value={operadorId} 
+          onChange={e => setOperadorId(e.target.value)}
+          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+        >
+          <option value="">Seleccionar...</option>
+          {operadores.filter(o => o.activo).map(op => (
+            <option key={op.id} value={op.id}>{op.nombre}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-slate-400 text-xs">Monto Total *</label>
+          <input 
+            type="number" 
+            value={monto}
+            onChange={e => setMonto(e.target.value)}
+            placeholder="0.00"
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+          />
+        </div>
+        <div>
+          <label className="text-slate-400 text-xs">Descuento Semanal *</label>
+          <input 
+            type="number" 
+            value={descuentoSemanal}
+            onChange={e => setDescuentoSemanal(e.target.value)}
+            placeholder="0.00"
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+          />
+        </div>
+      </div>
+
+      {semanas > 0 && (
+        <div className="bg-amber-500/20 rounded-lg p-2 text-center">
+          <span className="text-amber-400 text-sm">Se liquidará en aproximadamente <strong>{semanas} semanas</strong></span>
+        </div>
+      )}
+
+      <div>
+        <label className="text-slate-400 text-xs">Motivo</label>
+        <input 
+          type="text" 
+          value={motivo}
+          onChange={e => setMotivo(e.target.value)}
+          placeholder="Ej: Adelanto para emergencia médica"
+          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+        />
+      </div>
+
+      <button 
+        onClick={guardar}
+        disabled={guardando}
+        className="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-slate-600 text-slate-900 font-semibold py-3 rounded-xl"
+      >
+        {guardando ? '⏳ Guardando...' : '💾 Registrar Préstamo'}
+      </button>
+    </div>
+  );
+}
+
+// Formulario de Falta
+function FormFalta({operadores, sheetsUrl}) {
+  const [operadorId, setOperadorId] = useState('');
+  const [fecha, setFecha] = useState(HOY());
+  const [tipo, setTipo] = useState('injustificada');
+  const [descuento, setDescuento] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  const nominaId = generarNominaId(getLunesSemana(fecha));
+
+  const guardar = async () => {
+    if (!operadorId || !fecha) {
+      alert('Seleccione operador y fecha');
+      return;
+    }
+
+    setGuardando(true);
+    const resultado = await enviarDatos(sheetsUrl, {
+      action: 'registrar_falta',
+      operador_id: operadorId,
+      fecha,
+      tipo,
+      descuento: tipo === 'injustificada' ? parseFloat(descuento) || 0 : 0,
+      motivo,
+      periodo_nomina: nominaId
+    });
+    setGuardando(false);
+
+    if (resultado.success) {
+      alert(`✅ Falta registrada: ${resultado.id}`);
+      setOperadorId('');
+      setFecha(HOY());
+      setDescuento('');
+      setMotivo('');
+    } else {
+      alert(`❌ Error: ${resultado.error}`);
+    }
+  };
+
+  return (
+    <div className="bg-slate-800 rounded-xl p-4 border border-red-500/30 space-y-4">
+      <h3 className="text-red-400 font-bold">❌ Registrar Falta</h3>
+      
+      <div>
+        <label className="text-slate-400 text-xs">Operador *</label>
+        <select 
+          value={operadorId} 
+          onChange={e => setOperadorId(e.target.value)}
+          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+        >
+          <option value="">Seleccionar...</option>
+          {operadores.filter(o => o.activo).map(op => (
+            <option key={op.id} value={op.id}>{op.nombre}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-slate-400 text-xs">Fecha *</label>
+          <input 
+            type="date" 
+            value={fecha}
+            onChange={e => setFecha(e.target.value)}
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+          />
+        </div>
+        <div>
+          <label className="text-slate-400 text-xs">Tipo</label>
+          <select 
+            value={tipo} 
+            onChange={e => setTipo(e.target.value)}
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+          >
+            <option value="injustificada">Injustificada</option>
+            <option value="justificada">Justificada</option>
+          </select>
+        </div>
+      </div>
+
+      {tipo === 'injustificada' && (
+        <div>
+          <label className="text-slate-400 text-xs">Descuento</label>
+          <input 
+            type="number" 
+            value={descuento}
+            onChange={e => setDescuento(e.target.value)}
+            placeholder="0.00"
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+          />
+        </div>
+      )}
+
+      <div>
+        <label className="text-slate-400 text-xs">Motivo</label>
+        <input 
+          type="text" 
+          value={motivo}
+          onChange={e => setMotivo(e.target.value)}
+          placeholder="Ej: No se presentó a trabajar"
+          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+        />
+      </div>
+
+      <div className="bg-slate-700/50 rounded-lg p-2 text-center">
+        <span className="text-slate-400 text-xs">Se aplicará en: </span>
+        <span className="text-white text-sm font-medium">{nominaId}</span>
+      </div>
+
+      <button 
+        onClick={guardar}
+        disabled={guardando}
+        className="w-full bg-red-500 hover:bg-red-400 disabled:bg-slate-600 text-white font-semibold py-3 rounded-xl"
+      >
+        {guardando ? '⏳ Guardando...' : '💾 Registrar Falta'}
+      </button>
+    </div>
+  );
+}
+
+// Formulario de Actividad Extra
+function FormActividad({operadores, sheetsUrl}) {
+  const [operadorId, setOperadorId] = useState('');
+  const [fecha, setFecha] = useState(HOY());
+  const [descripcion, setDescripcion] = useState('');
+  const [monto, setMonto] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  const nominaId = generarNominaId(getLunesSemana(fecha));
+
+  const guardar = async () => {
+    if (!operadorId || !descripcion || !monto) {
+      alert('Complete todos los campos');
+      return;
+    }
+
+    setGuardando(true);
+    const resultado = await enviarDatos(sheetsUrl, {
+      action: 'registrar_actividad',
+      operador_id: operadorId,
+      fecha,
+      descripcion,
+      monto: parseFloat(monto),
+      periodo_nomina: nominaId
+    });
+    setGuardando(false);
+
+    if (resultado.success) {
+      alert(`✅ Actividad registrada: ${resultado.id}`);
+      setOperadorId('');
+      setFecha(HOY());
+      setDescripcion('');
+      setMonto('');
+    } else {
+      alert(`❌ Error: ${resultado.error}`);
+    }
+  };
+
+  return (
+    <div className="bg-slate-800 rounded-xl p-4 border border-blue-500/30 space-y-4">
+      <h3 className="text-blue-400 font-bold">⭐ Registrar Actividad Extra</h3>
+      
+      <div>
+        <label className="text-slate-400 text-xs">Operador *</label>
+        <select 
+          value={operadorId} 
+          onChange={e => setOperadorId(e.target.value)}
+          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+        >
+          <option value="">Seleccionar...</option>
+          {operadores.filter(o => o.activo).map(op => (
+            <option key={op.id} value={op.id}>{op.nombre}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-slate-400 text-xs">Fecha</label>
+          <input 
+            type="date" 
+            value={fecha}
+            onChange={e => setFecha(e.target.value)}
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+          />
+        </div>
+        <div>
+          <label className="text-slate-400 text-xs">Monto *</label>
+          <input 
+            type="number" 
+            value={monto}
+            onChange={e => setMonto(e.target.value)}
+            placeholder="0.00"
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="text-slate-400 text-xs">Descripción *</label>
+        <input 
+          type="text" 
+          value={descripcion}
+          onChange={e => setDescripcion(e.target.value)}
+          placeholder="Ej: Apoyo en instalación de cables"
+          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-1"
+        />
+      </div>
+
+      <div className="bg-slate-700/50 rounded-lg p-2 text-center">
+        <span className="text-slate-400 text-xs">Se pagará en: </span>
+        <span className="text-white text-sm font-medium">{nominaId}</span>
+      </div>
+
+      <button 
+        onClick={guardar}
+        disabled={guardando}
+        className="w-full bg-blue-500 hover:bg-blue-400 disabled:bg-slate-600 text-white font-semibold py-3 rounded-xl"
+      >
+        {guardando ? '⏳ Guardando...' : '💾 Registrar Actividad'}
+      </button>
+    </div>
+  );
+}
+
+// ============================================
+// HISTORIAL DE NÓMINAS
+// ============================================
+function Historial({sheetsUrl}) {
+  const [nominas, setNominas] = useState([]);
+  const [nominaSeleccionada, setNominaSeleccionada] = useState(null);
+  const [procesando, setProcesando] = useState(false);
+
+  useEffect(() => {
+    setNominas(JSON.parse(localStorage.getItem('nom_nominas') || '[]'));
+  }, []);
+
+  const getEstatusColor = (estatus) => {
+    switch(estatus) {
+      case 'borrador': return 'bg-slate-500';
+      case 'aprobada': return 'bg-amber-500';
+      case 'pagada': return 'bg-emerald-500';
+      default: return 'bg-slate-500';
+    }
+  };
+
+  const aprobar = async (nominaId) => {
+    if (!confirm(`¿Aprobar nómina ${nominaId}? Se procesarán los descuentos de préstamos.`)) return;
+    
+    setProcesando(true);
+    const resultado = await enviarDatos(sheetsUrl, {
+      action: 'aprobar_nomina',
+      nomina_id: nominaId
+    });
+    setProcesando(false);
+
+    if (resultado.success) {
+      alert('✅ Nómina aprobada');
+      // Actualizar estado local
+      setNominas(nominas.map(n => 
+        n.nomina_id === nominaId ? {...n, estatus: 'aprobada'} : n
+      ));
+    } else {
+      alert(`❌ Error: ${resultado.error}`);
+    }
+  };
+
+  const pagar = async (nominaId) => {
+    if (!confirm(`¿Marcar nómina ${nominaId} como pagada? Se generará la póliza en ContaGen.`)) return;
+    
+    setProcesando(true);
+    const resultado = await enviarDatos(sheetsUrl, {
+      action: 'pagar_nomina',
+      nomina_id: nominaId,
+      fecha_pago: HOY()
+    });
+    setProcesando(false);
+
+    if (resultado.success) {
+      alert(`✅ Nómina pagada. Póliza: ${resultado.poliza_id}`);
+      setNominas(nominas.map(n => 
+        n.nomina_id === nominaId ? {...n, estatus: 'pagada', poliza_id: resultado.poliza_id} : n
+      ));
+    } else {
+      alert(`❌ Error: ${resultado.error}`);
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <h2 className="text-white font-bold">📊 Historial de Nóminas</h2>
+
+      {nominas.length === 0 ? (
+        <div className="bg-slate-800 rounded-xl p-6 text-center">
+          <p className="text-slate-400">No hay nóminas registradas</p>
+          <p className="text-slate-500 text-sm mt-1">Calcula tu primera nómina en la pestaña 📋</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {nominas.sort((a, b) => b.nomina_id.localeCompare(a.nomina_id)).map((nom, i) => (
+            <div key={i} className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <p className="text-white font-semibold">{nom.nomina_id}</p>
+                  <p className="text-slate-400 text-xs">
+                    {nom.periodo_inicio} → {nom.periodo_fin}
+                  </p>
+                </div>
+                <span className={`${getEstatusColor(nom.estatus)} px-2 py-1 rounded text-xs text-white font-medium`}>
+                  {nom.estatus}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center text-sm mb-3">
+                <div>
+                  <p className="text-slate-500 text-xs">Bruto</p>
+                  <p className="text-white">{formatMoney(nom.total_bruto)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs">Deduc.</p>
+                  <p className="text-red-400">-{formatMoney(nom.total_deducciones)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs">Neto</p>
+                  <p className="text-emerald-400 font-bold">{formatMoney(nom.total_neto)}</p>
+                </div>
+              </div>
+
+              {/* Acciones según estatus */}
+              <div className="flex gap-2">
+                {nom.estatus === 'borrador' && (
+                  <button 
+                    onClick={() => aprobar(nom.nomina_id)}
+                    disabled={procesando}
+                    className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold py-2 rounded-lg text-sm"
+                  >
+                    ✓ Aprobar
+                  </button>
+                )}
+                {nom.estatus === 'aprobada' && (
+                  <button 
+                    onClick={() => pagar(nom.nomina_id)}
+                    disabled={procesando}
+                    className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold py-2 rounded-lg text-sm"
+                  >
+                    💳 Pagar
+                  </button>
+                )}
+                {nom.estatus === 'pagada' && nom.poliza_id && (
+                  <div className="flex-1 bg-slate-700 text-slate-300 py-2 rounded-lg text-sm text-center">
+                    Póliza: {nom.poliza_id}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// CONFIGURACIÓN
+// ============================================
+function Config({sheetsUrl, setSheetsUrl}) {
+  const [url, setUrl] = useState(sheetsUrl);
+  const [guardado, setGuardado] = useState(false);
+
+  const guardar = () => {
+    localStorage.setItem(SHEETS_URL_KEY, url);
+    setSheetsUrl(url);
+    setGuardado(true);
+    setTimeout(() => setGuardado(false), 2000);
+  };
+
+  const limpiarDatos = () => {
+    if (confirm('¿Borrar todos los datos locales? Esto no afecta al servidor.')) {
+      localStorage.removeItem('nom_operadores');
+      localStorage.removeItem('nom_servicios');
+      localStorage.removeItem('nom_prestamos');
+      localStorage.removeItem('nom_faltas');
+      localStorage.removeItem('nom_actividades');
+      localStorage.removeItem('nom_nominas');
+      alert('Datos locales borrados');
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <h2 className="text-white font-bold">⚙️ Configuración</h2>
+
+      {/* URL del servidor */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <label className="text-slate-400 text-sm">URL del Web App (Google Apps Script)</label>
+        <input 
+          type="url" 
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder="https://script.google.com/macros/s/.../exec"
+          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white mt-2 text-sm"
+        />
+        <button 
+          onClick={guardar}
+          className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold py-2 rounded-lg mt-3"
+        >
+          {guardado ? '✓ Guardado' : '💾 Guardar URL'}
+        </button>
+      </div>
+
+      {/* Información */}
+      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+        <h3 className="text-white font-semibold mb-3">📱 Información</h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-slate-400">Versión</span>
+            <span className="text-white">1.0.0</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">Operadores</span>
+            <span className="text-white">
+              {JSON.parse(localStorage.getItem('nom_operadores') || '[]').length}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">Nóminas guardadas</span>
+            <span className="text-white">
+              {JSON.parse(localStorage.getItem('nom_nominas') || '[]').length}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Acciones */}
+      <div className="space-y-2">
+        <button 
+          onClick={limpiarDatos}
+          className="w-full bg-red-500/20 hover:bg-red-500/30 text-red-400 font-semibold py-3 rounded-xl border border-red-500/30"
+        >
+          🗑️ Limpiar Datos Locales
+        </button>
+      </div>
+
+      {/* Ayuda */}
+      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+        <h4 className="text-emerald-400 font-semibold mb-2">💡 Configuración Inicial</h4>
+        <ol className="text-slate-300 text-sm space-y-1 list-decimal list-inside">
+          <li>Ejecuta <code className="bg-slate-700 px-1 rounded">inicializarModuloNominas()</code> en Apps Script</li>
+          <li>Configura operadores en la hoja <strong>Operadores_Nomina</strong></li>
+          <li>Despliega el Web App y copia la URL aquí</li>
+          <li>Pulsa el botón de sincronizar en la pantalla principal</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// RENDER
+// ============================================
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
